@@ -1,0 +1,115 @@
+"""Zuteilung von Wärmepumpen und E-Autos, Wärmepumpenlast je Station, E-Auto-Ladeereignisse.
+
+Modellannahmen wie ``steyr_wp_ev.py`` (eingefroren), aber vektorisiert: E-Autos als Ladeereignisse
+(Ankunft, Energie, Leistung), damit die Ladesteuerung (control.py) nur die Startzeit verschiebt.
+"""
+from dataclasses import dataclass
+
+import numpy as np
+from scipy import sparse
+
+from gridsim import legacy
+
+wpev = legacy.load('steyr_wp_ev')
+HOURS = 8760
+DAYS = HOURS // 24
+DEADLINE_H = 7  # Ladeende spätestens am Folgetag 7 Uhr (gesteuertes Laden, WiNAP)
+
+
+@dataclass
+class EvEvents:
+    node: np.ndarray        # (M,) Knoten des Autos
+    station: np.ndarray     # (M,) Station des Knotens
+    arrive_h: np.ndarray    # (M,) Stunde im Jahr, ab der geladen werden kann
+    kwh_grid: np.ndarray    # (M,) Energie aus dem Netz inkl. Ladeverlust
+    kw: np.ndarray          # (M,) Ladeleistung der Wallbox
+    deadline_h: np.ndarray  # (M,) Folgetag 7 Uhr
+
+    def __len__(self):
+        return len(self.node)
+
+
+def assign(p, scenario, rng):
+    """Jahreswärme (kWh_th) und Anzahl E-Autos je Knoten wie ``steyr_wp_ev.assign``, LoD1-Wärme wo vorhanden."""
+    share = wpev.SCENARIOS[scenario]
+    hh = np.asarray(p.nodes_hh, dtype=int)
+    fw = np.asarray(p.nodes_fw, dtype=bool)
+    homes = hh > 0
+    fw_frac = fw[homes].mean() if homes.any() else 0.0
+    p_wp = min(1.0, share['wp_share'] / max(1 - fw_frac, 1e-9))
+    has_wp = homes & ~fw & (rng.random(len(hh)) < p_wp)
+    pauschal = np.where(hh == 1, wpev.HEAT_KWH_EFH, wpev.HEAT_KWH_MFH_HH * hh).astype(float)
+    lod1 = np.asarray(p.nodes_heat_kwh, dtype=float)
+    heat = np.where(has_wp, np.where(np.isnan(lod1), pauschal, lod1), 0.0)
+    cars = np.where(homes, rng.binomial(np.maximum(hh, 0), share['ev_share']), 0)
+    return heat, cars
+
+
+def _onehot(p, columns=None):
+    st = np.asarray(p.nodes_station)
+    if columns is not None:
+        st = st[columns]
+    return sparse.csr_matrix((np.ones(len(st), dtype=np.float32), (np.arange(len(st)), st)),
+                             shape=(len(st), p.n_stations))
+
+
+def station_sum(values_by_node, p):
+    """(8760, N) je Knoten → (8760, S) je Station."""
+    return np.asarray(sparse.csr_matrix(values_by_node) @ _onehot(p) if sparse.issparse(values_by_node)
+                      else values_by_node @ _onehot(p), dtype=np.float32)
+
+
+def heat_pump(p, heat_kwh, seed):
+    """Wärmepumpenlast (kW): Stationssumme (8760, S) und Matrix der Speicherknoten (8760, K).
+
+    Zellenweise wie ``heat_pump_kw_cells`` mit Streuung ``spread(N, seed)``; jede Zelle wird sofort auf
+    Stationen verdichtet, damit keine volle Knotenmatrix im Speicher liegt.
+    """
+    heat = np.asarray(heat_kwh, dtype=float)
+    limits, shifts = wpev.spread(len(heat), seed)
+    dhw = np.asarray(p.nodes_dhw, dtype=float)
+    dhw = np.where(np.isnan(dhw), wpev.DHW_SHARE, dhw)
+    cells = np.asarray(p.nodes_cell)
+    temp = np.asarray(p.temp_cells, dtype=float)
+    storage_idx = np.flatnonzero(np.asarray(p.nodes_kwh) > 0)
+    pos = {n: k for k, n in enumerate(storage_idx)}
+    st_sum = np.zeros((HOURS, p.n_stations), dtype=np.float32)
+    storage = np.zeros((HOURS, len(storage_idx)), dtype=np.float32)
+    for c in np.unique(cells[heat > 0]):
+        idx = np.flatnonzero((cells == c) & (heat > 0))
+        el = wpev.heat_pump_kw(temp[:, c], heat[idx], limits[idx], shifts[idx], dhw[idx])
+        st_sum += np.asarray(el @ _onehot(p, idx), dtype=np.float32)
+        for j, n in enumerate(idx):
+            if n in pos:
+                storage[:, pos[n]] = el[:, j]
+    return st_sum, storage
+
+
+def ev_events(p, cars, rng):
+    """Ladeereignisse aller E-Autos; Schleife über Tage, vektorisiert über Autos."""
+    cars = np.asarray(cars, dtype=int)
+    node = np.repeat(np.arange(len(cars)), cars).astype(np.int32)
+    m = len(node)
+    t_day = np.asarray(p.temp_cells, dtype=float).mean(axis=1)[:DAYS * 24].reshape(DAYS, 24).mean(axis=1)
+    kwh_day = wpev.KM_PER_YEAR / 365 * wpev.KWH_PER_KM * (1 + wpev.COLD_PER_K * np.maximum(15 - t_day, 0))
+    weekend = (np.arange(DAYS) + p.first_weekday) % 7 >= 5
+    kw = np.where(rng.random(m) < wpev.EV_FAST_SHARE, wpev.EV_KW_FAST, wpev.EV_KW_SLOW).astype(np.float32)
+    need = rng.uniform(0, wpev.EV_CHARGE_KWH, m)  # Startzustand streuen
+    out_car, out_h, out_kwh = [], [], []
+    for d in range(DAYS):
+        need += kwh_day[d] * rng.uniform(0.5, 1.5, m)
+        go = np.flatnonzero(need >= wpev.EV_CHARGE_KWH)
+        if not len(go):
+            continue
+        mu, sd = wpev.ARRIVAL_WEEKEND if weekend[d] else wpev.ARRIVAL_WEEKDAY
+        hour = np.clip(rng.normal(mu, sd, len(go)), 12, 23).astype(int)
+        out_car.append(go)
+        out_h.append(d * 24 + hour)
+        out_kwh.append(need[go] / wpev.EV_ETA)
+        need[go] = 0.0
+    car = np.concatenate(out_car) if out_car else np.zeros(0, dtype=int)
+    arrive = np.concatenate(out_h).astype(np.int32) if out_h else np.zeros(0, dtype=np.int32)
+    kwh = np.concatenate(out_kwh).astype(np.float32) if out_kwh else np.zeros(0, dtype=np.float32)
+    n = node[car]
+    return EvEvents(node=n, station=np.asarray(p.nodes_station)[n].astype(np.int32), arrive_h=arrive, kwh_grid=kwh,
+                    kw=kw[car], deadline_h=((arrive // 24 + 1) * 24 + DEADLINE_H).astype(np.int32))

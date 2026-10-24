@@ -45,3 +45,25 @@ def write_fake_prepared(root, year=2023, kva=(160, 250, 125)):
     (d / 'stations.json').write_text(json.dumps(stations))
     (d / 'manifest.json').write_text(json.dumps({'year': year, 'inputs': {}, 'legacy_frozen_at': 'fake'}))
     return root
+
+
+def big_prepared(n_homes=2000, n_stations=20, year=2023, seed=1):
+    """Prepared im Speicher mit vielen Wohnknoten (für Anteils- und Laufzeittests)."""
+    from gridsim.data import Prepared
+    rng = np.random.default_rng(seed)
+    hh = np.where(rng.random(n_homes) < 0.8, 1, 5).astype(np.int16)
+    station = (np.arange(n_homes) % n_stations).astype(np.int32)
+    kwp_bins = np.zeros((n_homes, 4), dtype=np.float32)
+    kwp_bins[:, 0] = np.where(rng.random(n_homes) < 0.3, 8.0, 0.0)
+    temp = np.column_stack([winter_summer(), winter_summer(-2)]).astype(np.float32)
+    h0 = np.full(HOURS, 1 / HOURS, dtype=np.float32)
+    stations = [{'id': f'way/{i}', 'idx': i, 'kva': 400, 'lon': 14.4, 'lat': 48.0, 'uw': 'Steyr', 'synthetic': 0,
+                 'n_hh': int(hh[station == i].sum()), 'n_buildings': int((station == i).sum()), 'kwp': 0.0}
+                for i in range(n_stations)]
+    return Prepared(year=year, root=None, nodes_station=station, nodes_hh=hh, nodes_kwp_bins=kwp_bins,
+                    nodes_kwh=np.where(kwp_bins[:, 0] > 0, 8.0, 0.0).astype(np.float32),
+                    nodes_fw=(hh > 1) & (rng.random(n_homes) < 0.3), nodes_cell=(np.arange(n_homes) % 2).astype(np.int16),
+                    nodes_heat_kwh=np.where(hh == 1, 18000.0, 7000.0 * hh).astype(np.float32),
+                    nodes_dhw=np.full(n_homes, np.nan, dtype=np.float32),
+                    pv_bins=np.zeros((HOURS, 4), dtype=np.float32), h0=h0, h0_q=np.repeat(h0, 4) / 4,
+                    temp_cells=temp, stations=stations)
