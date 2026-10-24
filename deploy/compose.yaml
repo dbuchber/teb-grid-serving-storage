@@ -1,0 +1,30 @@
+# Start auf hetzner: docker compose -f deploy/compose.yaml up -d --build (im Repo-Verzeichnis)
+services:
+  gridsim:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        GRIDSIM_VERSION: ${GRIDSIM_VERSION:-unknown}
+    image: gridsim-api
+    container_name: gridsim-api
+    restart: unless-stopped
+    network_mode: bridge          # Docker-Adresspools auf hetzner erschöpft
+    ports:
+      - "127.0.0.1:17061:8000"
+    volumes:
+      - /data/infra-kg-austria/work/gridsim/prepared:/prepared:ro
+      - /data/infra-kg-austria/work/gridsim/cache:/cache
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 20
+    mem_limit: 40g
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
