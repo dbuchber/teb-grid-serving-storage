@@ -1,7 +1,7 @@
 """Ladesteuerung (Startzeiten der Ladeereignisse), gesteuertes Laden, V2G und Heimspeicher je Station.
 
 Steuerlogiken (Spec § 4): ungesteuert; WiNAP = im Winter Start um 23 Uhr, wenn bis 7 Uhr fertig;
-T3d = an Tagen mit Engpassprognose Start zur Gruppenzeit der Station (22/0/2 Uhr), sonst WiNAP.
+T3d = an Tagen mit Engpassprognose Start zur Gruppenzeit des Haushalts (22/0/2 Uhr), sonst WiNAP.
 Gesteuertes Laden und V2G drosseln nur Wallboxen gegen 100 % Trafo-Bemessung.
 """
 import hashlib
@@ -62,15 +62,20 @@ def start_winap(ev, year):
     return np.where(shift, window, ev.arrive_h).astype(np.int32)
 
 
-def group_of(station_ids):
-    return np.array([int(hashlib.sha1(s.encode()).hexdigest(), 16) % 3 for s in station_ids])
+def node_group(nodes):
+    """Gruppe 0/1/2 je Haushaltsknoten (fest, gleichmäßig verteilt)."""
+    return (np.asarray(nodes, dtype=np.int64) * 2654435761 % 2**32) % 3
 
 
-def start_t3d(ev, signal, group, year):
+def start_t3d(ev, signal, year):
+    """An Signal-Tagen startet jedes Auto zur Zeit seiner Haushaltsgruppe (22/0/2 Uhr), sonst wie WiNAP.
+
+    Gestaffelt wird innerhalb des Segments: für den Trafo zählt die Gleichzeitigkeit an der Station.
+    """
     base = start_winap(ev, year)
     day = ev.arrive_h // 24
     on = signal[ev.station, np.minimum(day, signal.shape[1] - 1)]
-    target = day * 24 + np.asarray(GROUP_START_H)[group[ev.station]]
+    target = day * 24 + np.asarray(GROUP_START_H)[node_group(ev.node)]
     target = np.maximum(np.minimum(target, _latest_start(ev)), ev.arrive_h)
     return np.where(on, target, base).astype(np.int32)
 

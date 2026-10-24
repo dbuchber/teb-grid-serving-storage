@@ -50,36 +50,35 @@ def test_winap_creates_synchronous_peak():
     assert win.max() > unc.max()
 
 
-def test_t3d_staggers_by_group():
+def test_t3d_staggers_within_station():
     d = 15
-    ev = events([d * 24 + 18] * 3, [5.0] * 3, [11.0] * 3, station=[0, 1, 2])
-    signal = np.zeros((3, 365), dtype=bool)
-    signal[:, d] = True
-    start = control.start_t3d(ev, signal, np.array([0, 1, 2]), 2023)
-    assert list(start) == [d * 24 + 22, (d + 1) * 24, (d + 1) * 24 + 2]
+    ev = events([d * 24 + 18] * 30, [5.0] * 30, [11.0] * 30)  # 30 Autos an einer Station
+    signal = np.zeros((1, 365), dtype=bool)
+    signal[0, d] = True
+    start = control.start_t3d(ev, signal, 2023)
+    assert set(start) == {d * 24 + 22, (d + 1) * 24, (d + 1) * 24 + 2}
+    assert np.bincount(control.node_group(ev.node), minlength=3).min() >= 5  # Gruppen etwa gleich groß
 
 
 def test_t3d_without_signal_is_winap():
     ev = events([15 * 24 + 18], [5.0], [11.0])
-    start = control.start_t3d(ev, np.zeros((1, 365), dtype=bool), np.array([2]), 2023)
+    start = control.start_t3d(ev, np.zeros((1, 365), dtype=bool), 2023)
     assert start[0] == control.start_winap(ev, 2023)[0]
 
 
 def test_t3d_peak_below_winap():
-    p = big_prepared(n_homes=300, n_stations=3)
+    p = big_prepared(n_homes=300, n_stations=1)
     ev = profiles.ev_events(p, np.ones(300, dtype=int), np.random.default_rng(2))
-    signal = np.ones((3, 365), dtype=bool)
-    groups = np.array([0, 1, 2])
-    win = control.render(ev, control.start_winap(ev, 2023), 3).sum(axis=1)
-    t3d = control.render(ev, control.start_t3d(ev, signal, groups, 2023), 3).sum(axis=1)
-    assert t3d.max() < win.max()
+    signal = np.ones((1, 365), dtype=bool)
+    win = control.render(ev, control.start_winap(ev, 2023), 1)[:, 0]
+    t3d = control.render(ev, control.start_t3d(ev, signal, 2023), 1)[:, 0]
+    assert t3d.max() < win.max()   # an derselben Station: keine neue Spitze
     assert t3d.sum() == pytest.approx(win.sum(), rel=2e-3)  # Jahresende: Ladung nach 31.12. entfällt (wie legacy)
 
 
-def test_group_of_is_stable():
-    g = control.group_of(['way/1', 'node/2', 'demo:steyr:station-003'])
-    assert list(g) == list(control.group_of(['way/1', 'node/2', 'demo:steyr:station-003']))
-    assert set(g) <= {0, 1, 2}
+def test_node_group_is_stable():
+    g = control.node_group(np.arange(100))
+    assert list(g) == list(control.node_group(np.arange(100))) and set(g) == {0, 1, 2}
 
 
 def test_engpass_signal_evening_window():
