@@ -75,8 +75,7 @@ def flows(p, params, i):
     if params.charging == 'winap':
         start = control.start_winap(ev, p.year)
     elif params.charging == 't3d':
-        unc = base + control.render(ev, ev.arrive_h, s)
-        start = control.start_t3d(ev, control.engpass_signal(unc, p.kva), p.year)
+        start = control.start_t3d_forecast(ev, base, p.kva, p.year)
     else:
         start = control.start_uncontrolled(ev)
     ev_load = control.render(ev, start, s)

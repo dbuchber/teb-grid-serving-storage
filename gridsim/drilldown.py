@@ -37,8 +37,7 @@ def _station_parts(p, params, s, i):
     if params.charging == 'winap':
         start = control.start_winap(ev, p.year)
     elif params.charging == 't3d':
-        unc = base[:, None] + control.render(ev, ev.arrive_h, 1)
-        start = control.start_t3d(ev, control.engpass_signal(unc, kva), p.year)
+        start = control.start_t3d_forecast(ev, base[:, None], kva, p.year)
     else:
         start = control.start_uncontrolled(ev)
     ev_h = control.render(ev, start, 1)

@@ -131,3 +131,16 @@ def test_storage_flow_matches_legacy_base(tmp_path):
     net = sim.simulate(pv, load, np.asarray(p.nodes_kwh, float), 'base')
     ref = np.column_stack([net[:, p.nodes_station == s].sum(axis=1) for s in range(3)])
     assert np.allclose(flow, ref, rtol=1e-4, atol=1e-3)
+
+
+def test_t3d_signal_forecasts_winap_peak():
+    d = 20  # Jänner
+    arrive = [d * 24 + h for h in (16, 16, 17, 17, 18, 18, 19, 19, 20, 20)]
+    ev = events(arrive, [8.0] * 10, [11.0] * 10)  # gemeinsam 80 kW ab 23 Uhr
+    base = np.zeros((8760, 1))
+    kva = np.array([50.0])
+    assert control.render(ev, ev.arrive_h, 1).max() < 50          # ungesteuert kein Engpass
+    assert control.render(ev, control.start_winap(ev, 2023), 1).max() > 50  # WiNAP erzeugt ihn
+    start = control.start_t3d_forecast(ev, base, kva, 2023)
+    assert len(set(start)) > 1                                     # Signal erkannt → gestaffelt
+    assert control.render(ev, start, 1).max() < control.render(ev, control.start_winap(ev, 2023), 1).max()

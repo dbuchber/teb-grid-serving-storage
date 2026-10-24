@@ -80,6 +80,12 @@ def start_t3d(ev, signal, year):
     return np.where(on, target, base).astype(np.int32)
 
 
+def start_t3d_forecast(ev, base, kva, year):
+    """T3d mit Engpassprognose des VNB: Fluss am Vortag unter den geltenden Tarifen (WiNAP) prognostiziert."""
+    forecast = np.asarray(base, dtype=float) + render(ev, start_winap(ev, year), len(kva))
+    return start_t3d(ev, engpass_signal(forecast, kva), year)
+
+
 def engpass_signal(flow, kva):
     """Tag d ist Signal, wenn der Fluss zwischen d 16 Uhr und d+1 8 Uhr über der Trafo-Bemessung liegt."""
     over = np.asarray(flow) > np.asarray(kva)[None, :]
