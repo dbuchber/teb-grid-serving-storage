@@ -1,0 +1,145 @@
+import json
+import threading
+import time
+
+import pytest
+from fastapi.testclient import TestClient
+
+from fakes import write_fake_prepared
+from gridsim.run import SeedResult, seed_of
+
+from api.app import create_app
+
+
+def fake_result(i):
+    return SeedResult(index=i, seed=seed_of(i), region={'stations_load_congestion': i, 'e_net_mwh': float(i),
+                      'storage_units': i, 'trafo_plus1': 0, 'trafo_plus2': 0, 'trafo_over_1000': 0},
+                      station_load_kw_max=[1.0, 2.0, 3.0], station_congestion_h=[i, 0, 0], station_feed_h=[0, 0, 0],
+                      worst_day=[1, 2, 3])
+
+
+class FakeRunner:
+    def __init__(self, delay=0.0, gate=None):
+        self.calls, self.delay, self.gate = [], delay, gate
+
+    def __call__(self, root, params, workers=4, cache_dir=None):
+        self.calls.append(params)
+        for i in range(params.n_seeds):
+            if self.gate is not None:
+                self.gate.wait(5)
+            time.sleep(self.delay)
+            yield fake_result(i)
+
+
+@pytest.fixture
+def make(tmp_path):
+    root = write_fake_prepared(tmp_path / 'prep')
+
+    def _make(runner=None, **kw):
+        app = create_app(prepared_root=root, cache_dir=tmp_path / 'cache', runner=runner or FakeRunner(), **kw)
+        return TestClient(app), app
+    return _make
+
+
+BODY = {'weather_year': 2023, 'scenario': '2030', 'pv_factor': 1.0, 'charging': 'uncontrolled', 'storage': 'base', 'n_seeds': 3}
+
+
+def wait_done(client, run_id, timeout=5):
+    t = time.time()
+    while time.time() - t < timeout:
+        r = client.get(f'/api/runs/{run_id}').json()
+        if r['status'] in ('done', 'cached', 'error'):
+            return r
+        time.sleep(0.02)
+    raise AssertionError('timeout')
+
+
+def test_health_and_options(make):
+    client, _ = make()
+    assert client.get('/api/health').json() == {'ok': True}
+    opt = client.get('/api/options').json()
+    assert 't3d' in opt['charging'] and opt['cost_defaults']['storage_eur_per_kwh'] == 600
+    assert 'trafo_step_eur' in opt['placeholders']
+    st = client.get('/api/stations').json()
+    assert [s['id'] for s in st] == ['way/1', 'node/2', 'demo:steyr:station-003']
+
+
+@pytest.mark.parametrize('field,value', [('weather_year', 2020), ('pv_factor', 3.0), ('charging', 'foo'), ('n_seeds', 'x')])
+def test_invalid_params_400(make, field, value):
+    client, _ = make()
+    r = client.post('/api/runs', json={**BODY, field: value})
+    assert r.status_code == 400 and field in r.json()['error']
+
+
+def test_same_params_run_once(make):
+    runner = FakeRunner(delay=0.05)
+    client, _ = make(runner)
+    a = client.post('/api/runs', json=BODY).json()
+    b = client.post('/api/runs', json=BODY).json()
+    assert a['run_id'] == b['run_id']
+    wait_done(client, a['run_id'])
+    assert len(runner.calls) == 1
+
+
+def test_max_jobs_queue(make):
+    gate = threading.Event()
+    client, _ = make(FakeRunner(gate=gate), max_jobs=2)
+    ids = [client.post('/api/runs', json={**BODY, 'charging': c}).json() for c in ('uncontrolled', 'winap', 't3d')]
+    assert [i['status'] for i in ids].count('queued') == 1
+    gate.set()
+    for i in ids:
+        assert wait_done(client, i['run_id'])['status'] == 'done'
+
+
+def test_resume_after_disconnect(make):
+    gate = threading.Event()
+    client, _ = make(FakeRunner(gate=gate))
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    gate.set()
+    with client.stream('GET', f'/api/runs/{run_id}/events') as s:
+        for line in s.iter_lines():
+            if line.startswith('data:') and '"index"' in line:
+                break  # Verbindung nach dem ersten Seed abbrechen
+    r = wait_done(client, run_id)
+    assert sorted(x['index'] for x in r['seeds']) == [0, 1, 2]
+
+
+def test_sse_replay_cached(make, tmp_path):
+    client, app = make(replay_delay=0.01)
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    client2, _ = make(replay_delay=0.01)  # neue App, gleicher Cache auf Platte → Replay
+    from gridsim.run import RunParams
+    from dataclasses import asdict
+    cache = tmp_path / 'cache' / RunParams(**BODY).key()
+    cache.mkdir(parents=True, exist_ok=True)
+    for i in range(3):
+        (cache / f'seed_{i}.json').write_text(json.dumps(asdict(fake_result(i))))
+    r = client2.post('/api/runs', json=BODY).json()
+    assert r['status'] == 'cached'
+    events = []
+    with client2.stream('GET', f'/api/runs/{r["run_id"]}/events') as s:
+        for line in s.iter_lines():
+            if line.startswith('event:'):
+                events.append(line.split(':', 1)[1].strip())
+    assert events == ['seed', 'seed', 'seed', 'done']
+
+
+def test_day_unknown_station_404(make):
+    client, _ = make()
+    r = client.get('/api/stations/way%2F999/day', params={'weather_year': 2023})
+    assert r.status_code == 404 and 'no model data' in r.json()['error']
+
+
+def test_day_known_station(make):
+    client, _ = make()
+    r = client.get('/api/stations/way%2F1/day', params={'weather_year': 2023, 'scenario': '2040'})
+    assert r.status_code == 200 and len(r.json()['trafo_kw']) == 96
+
+
+def test_costs(make):
+    client, _ = make()
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    r = client.post('/api/costs', json={'run_id': run_id, 'cost': {'trafo_step_eur': 30000}}).json()
+    assert r['storage_eur'] == 1 * 10 * 600 and r['trafo_eur'] == 0 and 'line_eur_per_m' in r['placeholders']
