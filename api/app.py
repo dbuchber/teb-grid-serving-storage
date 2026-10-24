@@ -32,14 +32,15 @@ class RunBody(BaseModel):
 
 class CostBody(BaseModel):
     run_id: str
-    cost: dict = {}
+    cost: dict[str, float | None] = {}
 
 
 def _error(status, msg):
     return JSONResponse({'error': msg}, status_code=status)
 
 
-def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, workers=None, replay_delay=None):
+def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, workers=None, replay_delay=None,
+               keepalive_s=15.0):
     root = Path(prepared_root or os.environ.get('GRIDSIM_PREPARED', '/prepared'))
     cache = Path(cache_dir or os.environ.get('GRIDSIM_CACHE', '/cache'))
     cache.mkdir(parents=True, exist_ok=True)
@@ -103,17 +104,19 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
         job = jobs.get(run_id)
         if not job:
             return _error(404, f'unknown run {run_id}')
-        replay = job.status == 'cached'
+        replay = job.finished  # fertig (Cache oder früher gerechnet): Band trotzdem sichtbar wachsen lassen
 
         def stream():
+            # nie unter job.cond yielden: bricht der Client ab, bliebe der Lock gehalten und der Lauf hinge
             sent = 0
             while True:
                 with job.cond:
-                    while sent >= len(job.seeds) and not job.finished:
-                        job.cond.wait(timeout=15)
-                        if sent >= len(job.seeds) and not job.finished:
-                            yield ': keepalive\n\n'
+                    if sent >= len(job.seeds) and not job.finished:
+                        job.cond.wait(timeout=keepalive_s)
                     new, finished = job.seeds[sent:], job.finished
+                if not new and not finished:
+                    yield ': keepalive\n\n'
+                    continue
                 for s in new:
                     if replay:
                         time.sleep(delay)

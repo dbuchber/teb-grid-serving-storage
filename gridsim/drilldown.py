@@ -45,7 +45,8 @@ def _station_parts(p, params, s, i):
     if params.charging in ('controlled', 'v2g'):
         ev_h, _ = control.controlled(base[:, None], ev_h, kva)
         if params.charging == 'v2g':
-            v2g = control.v2g(np.maximum(base[:, None] + ev_h - kva[None, :], 0), np.array([cars[at_s].sum()]))
+            out, recharge, _ = control.v2g_with_recharge(base[:, None], ev_h, kva, np.array([cars[at_s].sum()]))
+            v2g = out - recharge  # netto: Rückspeisung abends, Nachladen nachts
     flow = base + ev_h[:, 0] - v2g[:, 0]
     return {'ev': ev, 'start': start, 'ev_h': ev_h[:, 0], 'v2g': v2g[:, 0], 'pv': pv, 'household': household,
             'wp': wp, 'storage_dis': storage_dis, 'flow': flow, 'hh': float(np.asarray(p.nodes_hh)[at_s].sum())}

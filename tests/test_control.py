@@ -144,3 +144,16 @@ def test_t3d_signal_forecasts_winap_peak():
     start = control.start_t3d_forecast(ev, base, kva, 2023)
     assert len(set(start)) > 1                                     # Signal erkannt → gestaffelt
     assert control.render(ev, start, 1).max() < control.render(ev, control.start_winap(ev, 2023), 1).max()
+
+
+def test_v2g_energy_is_recharged_by_morning():
+    # Review I4: zurückgespeiste Energie muss bis 7 Uhr nachgeladen werden
+    base = np.full((8760, 1), 100.0)
+    base[10 * 24 + 18: 10 * 24 + 21, 0] = 450.0  # Abendspitze über 400 kVA
+    ev = np.zeros((8760, 1))
+    out, recharge, unmet = control.v2g_with_recharge(base, ev, np.array([400.0]), np.array([5]))
+    assert out.sum() > 0
+    assert recharge.sum() == pytest.approx(out.sum(), rel=1e-6)   # alles nachgeladen (Platz vorhanden)
+    assert (base + ev - out + recharge <= 400.0 + 1e-6)[10 * 24 + 21:].all()
+    assert recharge[10 * 24 + 18: 10 * 24 + 21].sum() == 0      # nicht während der Spitze
+    assert unmet.sum() == pytest.approx(0.0)

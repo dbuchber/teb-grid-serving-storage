@@ -19,6 +19,8 @@ PV_FACTORS = (1.0, 1.5, 2.0)
 CHARGING = ('uncontrolled', 'winap', 't3d', 'controlled', 'v2g')
 STORAGE = ('base', 'forecast', 'room')
 BASE_SEED = 20261024
+# Bei jeder Änderung an Modell oder Kennzahlen erhöhen: Teil des Cache-Schlüssels, alte Ergebnisse gelten dann nicht mehr
+MODEL_VERSION = '2026-10-24.3'
 MAX_SEEDS = 50
 
 
@@ -43,6 +45,7 @@ class RunParams:
     def key(self):
         d = asdict(self)
         d.pop('n_seeds')  # Seeds sind fest je Index; mehr Seeds ergänzen dieselbe Einstellung
+        d['model_version'] = MODEL_VERSION
         return hashlib.sha1(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -84,7 +87,9 @@ def flows(p, params, i):
         ev_load, unmet = control.controlled(base, ev_load, p.kva)
         if params.charging == 'v2g':
             cars_st = np.bincount(np.asarray(p.nodes_station), weights=cars, minlength=s)
-            v2g = control.v2g(np.maximum(base + ev_load - p.kva[None, :], 0), cars_st)
+            out, recharge, unmet_v2g = control.v2g_with_recharge(base, ev_load, p.kva, cars_st)
+            v2g = out - recharge  # netto: Rückspeisung abends, Nachladen nachts
+            unmet = unmet + unmet_v2g
     flow = np.asarray(base, dtype=float) + ev_load - v2g
     return {'heat': heat, 'cars': cars, 'wp_station': wp_st, 'ev': ev, 'start': start, 'base': base,
             'ev_load': ev_load, 'v2g': v2g, 'flow': flow, 'unmet': unmet}
@@ -125,14 +130,17 @@ def cached_seeds(cache_dir, params):
     for i in range(params.n_seeds):
         path = _seed_path(cache_dir, params, i)
         if path.exists():
-            out.append(SeedResult(**json.loads(path.read_text())))
+            try:
+                out.append(SeedResult(**json.loads(path.read_text())))
+            except (ValueError, TypeError):  # abgebrochen geschrieben: neu rechnen
+                path.unlink(missing_ok=True)
     return out
 
 
 def _write_manifest(cache_dir, root, params, runtime):
     d = Path(cache_dir) / params.key()
     prep = Path(root) / str(params.weather_year) / 'manifest.json'
-    manifest = {'params': asdict(params), 'code_version': code_version(), 'legacy_frozen_at': legacy.FROZEN_AT,
+    manifest = {'params': asdict(params), 'model_version': MODEL_VERSION, 'code_version': code_version(), 'legacy_frozen_at': legacy.FROZEN_AT,
                 'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),
                 'prepared_manifest_sha256': hashlib.sha256(prep.read_bytes()).hexdigest() if prep.exists() else None,
                 'seeds': [seed_of(i) for i in range(params.n_seeds)], 'runtime_s': round(runtime, 1)}
@@ -166,7 +174,10 @@ def run_many(root, params, workers=4, cache_dir=None):
             for fut in as_completed(futures):
                 r = fut.result()
                 if cache_dir:
-                    _seed_path(cache_dir, params, r.index).write_text(json.dumps(asdict(r)))
+                    path = _seed_path(cache_dir, params, r.index)
+                    tmp = path.with_suffix(f'.{os.getpid()}.tmp')
+                    tmp.write_text(json.dumps(asdict(r)))
+                    os.replace(tmp, path)  # atomar: Leser sehen nie eine halbe Datei
                 yield r
         if cache_dir:
             _write_manifest(cache_dir, root, params, time.perf_counter() - t)

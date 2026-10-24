@@ -51,3 +51,23 @@ def test_run_many_yields_all_seeds(tmp_path):
     assert [r.index for r in cached_seeds(cache, params())] == [0, 1, 2]
     again = list(run_many(root, params(), workers=2, cache_dir=cache))  # aus dem Cache
     assert [r.region for r in sorted(again, key=lambda r: r.index)] == [r.region for r in sorted(got, key=lambda r: r.index)]
+
+
+def test_corrupt_seed_file_is_skipped(tmp_path):
+    # Review I2: abgeschnittene Cache-Datei darf keinen 500 auslösen
+    root = write_fake_prepared(tmp_path / 'prep')
+    cache = tmp_path / 'cache'
+    list(run_many(root, params(), workers=1, cache_dir=cache))
+    (cache / params().key() / 'seed_1.json').write_text('{"index": 1, "se')
+    assert [r.index for r in cached_seeds(cache, params())] == [0, 2]
+    again = list(run_many(root, params(), workers=1, cache_dir=cache))
+    assert sorted(r.index for r in again) == [0, 1, 2]
+    assert not list((cache / params().key()).glob('*.tmp'))
+
+
+def test_key_includes_model_version(monkeypatch):
+    # Review I3: Modelländerung darf keinen alten Cache wiederverwenden
+    import gridsim.run as runmod
+    k1 = params().key()
+    monkeypatch.setattr(runmod, 'MODEL_VERSION', 'other')
+    assert params().key() != k1

@@ -143,3 +143,37 @@ def test_costs(make):
     wait_done(client, run_id)
     r = client.post('/api/costs', json={'run_id': run_id, 'cost': {'trafo_step_eur': 30000}}).json()
     assert r['storage_eur'] == 1 * 10 * 600 and r['trafo_eur'] == 0 and 'line_eur_per_m' in r['placeholders']
+
+
+def test_sse_disconnect_before_first_seed_does_not_block_run(make):
+    # Review C1: Keepalive darf nicht unter dem Lock gesendet werden
+    gate = threading.Event()
+    client, app = make(FakeRunner(gate=gate), keepalive_s=0.1)
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    with client.stream('GET', f'/api/runs/{run_id}/events') as s:
+        for line in s.iter_lines():
+            if line.startswith(':'):
+                break  # Keepalive erhalten, Client geht
+    import gc; gc.collect()
+    gate.set()
+    r = wait_done(client, run_id)
+    assert r['status'] == 'done' and len(r['seeds']) == 3
+
+
+def test_costs_invalid_value_400(make):
+    client, _ = make()
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    r = client.post('/api/costs', json={'run_id': run_id, 'cost': {'storage_eur_per_kwh': 'x'}})
+    assert r.status_code == 400
+
+
+def test_done_run_is_replayed_with_delay(make):
+    # Review M6: auch ein im selben Prozess fertig gerechneter Lauf wächst sichtbar
+    client, _ = make(replay_delay=0.05)
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    t = time.time()
+    with client.stream('GET', f'/api/runs/{run_id}/events') as s:
+        n = sum(1 for line in s.iter_lines() if line.startswith('event: seed'))
+    assert n == 3 and time.time() - t >= 0.14

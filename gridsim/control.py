@@ -129,6 +129,28 @@ def v2g(residual, cars):
     return out
 
 
+def v2g_with_recharge(base, ev, kva, cars):
+    """V2G-Rückspeisung gegen den Rest über der Grenze und Nachladen dieser Energie bis 7 Uhr unter der Grenze.
+
+    Gibt (Rückspeisung, Nachladen, bis 7 Uhr nicht nachgeladene Energie je Station und Tag) zurück.
+    """
+    flow = np.asarray(base, dtype=float) + np.asarray(ev, dtype=float)
+    kva = np.asarray(kva, dtype=float)
+    out = v2g(np.maximum(flow - kva[None, :], 0), cars)
+    p_cap = V2G_KW * V2G_AVAIL * np.asarray(cars, dtype=float)
+    recharge = np.zeros_like(out)
+    unmet = np.zeros((out.shape[1], DAYS + 1))
+    backlog = np.zeros(out.shape[1])
+    for h in range(out.shape[0]):
+        room = np.maximum(kva - flow[h] + out[h], 0.0)
+        recharge[h] = np.minimum(np.minimum(backlog, room), p_cap)
+        backlog = backlog - recharge[h] + out[h]
+        if h % 24 == DEADLINE_H:
+            unmet[:, h // 24] = backlog
+            backlog = np.zeros(out.shape[1])
+    return out, recharge, unmet[:, :DAYS]
+
+
 def storage_flow(p, pv_scale, strategy, wp_station, wp_storage_nodes):
     """Netto-Stationsfluss (kW, + = Bezug) aus PV, Haushalt und Wärmepumpe, ohne E-Auto.
 
