@@ -1,0 +1,165 @@
+// Regionen-Dashboard (Session 1f): echte gridsim-Läufe über alle 257 Stationen, Band wächst mit jedem Seed.
+// Einbettung: mount(el, { apiBase: "/api/", stations, onSelectStation }) – siehe app.js der Seite.
+import { createApi } from "./api.js";
+import { bandOf, fmt, stationValues } from "./band.js";
+import { el, renderCompare, renderDay, renderStrip, renderTiles } from "./charts.js";
+import { createStationMap } from "./map.js";
+
+const LABELS = {
+  charging: { uncontrolled: "Uncontrolled charging", winap: "Winter low-price window 23:00 (WiNAP)", t3d: "Dynamic grid tariff per segment (T3d)",
+    controlled: "Controlled charging (DSO limit)", v2g: "Controlled charging + V2G" },
+  storage: { base: "Self-consumption", forecast: "Grid-serving (forecast)", room: "Grid-serving (night discharge)" },
+  scenario: { heute: "Today", 2030: "2030", 2040: "2040" },
+  weather_year: { 2023: "2023 (mild)", 2017: "2017", 2012: "2012 (cold spell)" },
+  pv_factor: { 1: "PV as today", 1.5: "PV × 1.5", 2: "PV × 2" },
+};
+const FIELD_LABELS = { charging: "Charging control", storage: "Home batteries", scenario: "Scenario", weather_year: "Weather year", pv_factor: "PV build-out" };
+const DEFAULTS = { charging: "uncontrolled", storage: "base", scenario: "2030", weather_year: 2012, pv_factor: 1 };
+const COMPARE = { charging: "Charging control", scenario: "Scenario", weather_year: "Weather year" };
+const COMPARE_KPI = { stations_load_congestion: ["Overloaded transformers", 0], e_net_mwh: ["Energy above limit (MWh)", 1] };
+
+export function mount(root, { apiBase = "/api/", stations, onSelectStation = () => {} } = {}) {
+  const api = createApi(apiBase);
+  const state = { ...DEFAULTS, seeds: [], nSeeds: 20, runId: null, ids: [], stop: null, selected: null, options: null };
+  const select = (name, values) => el("label", { class: "gs-field" }, el("span", { text: FIELD_LABELS[name] }),
+    el("select", { name, onchange: e => { state[name] = name === "weather_year" ? +e.target.value : name === "pv_factor" ? +e.target.value : e.target.value; } },
+      ...values.map(v => el("option", { value: v, text: LABELS[name][v] ?? v, selected: String(v) === String(state[name]) || undefined }))));
+  const status = el("p", { class: "gs-status", role: "status", "aria-live": "polite" });
+  const tiles = el("div", { class: "gs-tiles" });
+  const strip = el("div", { class: "gs-chart" });
+  const mapBox = el("div", { class: "gs-map" });
+  const day = el("div", { class: "gs-chart gs-day-box" }, el("p", { class: "gs-hint", text: "Click a station on the map to see its worst day in 15-minute steps." }));
+  const compareBox = el("div", { class: "gs-chart" });
+  const costBox = el("div", { class: "gs-costs" });
+  const runBtn = el("button", { type: "button", class: "gs-run", text: "Run simulation", onclick: () => run() });
+  const controls = el("div", { class: "gs-controls" });
+  const compareDim = el("select", { "aria-label": "Compare dimension" }, ...Object.entries(COMPARE).map(([k, v]) => el("option", { value: k, text: v })));
+  const compareKpi = el("select", { "aria-label": "Compare value" }, ...Object.entries(COMPARE_KPI).map(([k, v]) => el("option", { value: k, text: v[0] })));
+  const compareBtn = el("button", { type: "button", text: "Compare", onclick: () => compare() });
+
+  root.classList.add("gs-root");
+  root.replaceChildren(
+    el("h3", { text: "Regional simulation: all 257 transformers in the Steyr area" }),
+    el("p", { class: "gs-hint", text: "Each run simulates a full year hour by hour with 20 random seeds (where heat pumps and EVs are, when cars arrive). The band shows how much the result depends on chance." }),
+    controls, status, tiles, strip,
+    el("div", { class: "gs-split" }, mapBox, day),
+    el("h4", { text: "Compare" }), el("div", { class: "gs-controls" }, compareDim, compareKpi, compareBtn), compareBox,
+    el("h4", { text: "Storage vs. grid reinforcement" }), costBox,
+    el("p", { class: "gs-foot", text: "All values are model values from the Steyr simulation, not measurements. Assumptions: heat demand from DORIS LoD1/TABULA, COP after when2heat, EV 12 000 km/a, transformer sizing 2–3 kVA per home; line reinforcement needs a load flow and is not part of the live model." }));
+
+  const map = createStationMap(mapBox, stations || { features: [] }, id => showDay(id, true));
+
+  function params() {
+    const { weather_year, scenario, pv_factor, charging, storage, nSeeds } = state;
+    return { weather_year, scenario, pv_factor, charging, storage, n_seeds: nSeeds };
+  }
+
+  function redraw() {
+    renderTiles(tiles, state.seeds, state.nSeeds);
+    renderStrip(strip, state.seeds, "stations_load_congestion", "Overloaded transformers per seed", 0);
+    map.update(stationValues(state.seeds, state.ids, "station_congestion_h"));
+  }
+
+  async function run() {
+    state.stop?.();
+    runBtn.disabled = true;
+    state.seeds = [];
+    redraw();
+    status.textContent = "Starting…";
+    try {
+      state.ids = (await api.stations(state.weather_year)).map(s => s.id);
+      const r = await api.startRun(params());
+      state.runId = r.run_id;
+      status.textContent = r.status === "queued" ? "Waiting for a free slot…" : r.status === "cached" ? "Replaying a finished run…" : "Running on the server…";
+      const t0 = performance.now();
+      state.stop = api.streamRun(r.run_id, s => {
+        state.seeds.push(s);
+        status.textContent = `${state.seeds.length} of ${state.nSeeds} seeds · ${fmt((performance.now() - t0) / 1000, 1)} s`;
+        redraw();
+      }, async done => {
+        runBtn.disabled = false;
+        status.textContent = done.status === "error" ? `Run failed: ${done.error}` : `${state.seeds.length} seeds in ${fmt((performance.now() - t0) / 1000, 1)} s`;
+        if (state.selected) showDay(state.selected, false);
+        updateCosts();
+      });
+    } catch (e) {
+      runBtn.disabled = false;
+      status.textContent = `Could not start: ${e.message}`;
+    }
+  }
+
+  async function showDay(id, fromMap) {
+    state.selected = id;
+    map.select(id);
+    if (fromMap) onSelectStation(id);
+    day.replaceChildren(el("p", { class: "gs-hint", text: `Loading ${id}…` }));
+    try {
+      const { weather_year, scenario, pv_factor, charging, storage } = state;
+      const c = await api.day(id, { weather_year, scenario, pv_factor, charging, storage, seed: 0 });
+      const head = el("p", { class: "gs-hint", text: `${id} · worst day ${c.date} · peak ${fmt(Math.max(...c.trafo_kw))} kW at ${fmt(c.kva)} kVA · ${LABELS.charging[charging]} · seed 1` });
+      const box = el("div");
+      day.replaceChildren(head, box);
+      renderDay(box, c);
+    } catch (e) {
+      day.replaceChildren(el("p", { class: "gs-hint", text: e.message.startsWith("no model data") ? `No model data for ${id}.` : `Could not load the day: ${e.message}` }));
+    }
+  }
+
+  async function compare() {
+    const dim = compareDim.value, kpi = compareKpi.value;
+    const values = state.options?.[dim] ?? Object.keys(LABELS[dim]);
+    const rows = values.map(v => ({ label: LABELS[dim][v] ?? String(v), value: v, band: null }));
+    const draw = () => renderCompare(compareBox, rows, COMPARE_KPI[kpi][0], COMPARE_KPI[kpi][1]);
+    compareBtn.disabled = true;
+    for (const row of rows) {   // nacheinander, damit der Server nicht überläuft; Gecachtes kommt sofort
+      row.pending = true; draw();
+      const p = { ...params(), [dim]: row.value };
+      try {
+        const r = await api.startRun(p);
+        const seeds = [];
+        await new Promise(resolve => api.streamRun(r.run_id, s => { seeds.push(s); row.band = bandOf(seeds, kpi); draw(); }, resolve));
+      } catch (e) { row.label += " (failed)"; }
+      row.pending = false; draw();
+    }
+    compareBtn.disabled = false;
+  }
+
+  const costInputs = {};
+  function costField(key, label, unit, placeholderNote) {
+    const input = el("input", { type: "number", min: 0, step: "any", inputmode: "decimal", placeholder: placeholderNote ? "no source yet" : "", onchange: updateCosts });
+    costInputs[key] = input;
+    return el("label", { class: "gs-field" }, el("span", { text: `${label} (${unit})` }), input);
+  }
+  const costOut = el("div", { class: "gs-cost-out" });
+  costBox.append(el("div", { class: "gs-controls" },
+    costField("storage_eur_per_kwh", "Home battery", "€/kWh"),
+    costField("trafo_step_eur", "Transformer one size up", "€ per step", true),
+    costField("line_eur_per_m", "Cable reinforcement", "€/m", true)), costOut);
+
+  async function updateCosts() {
+    if (!state.runId || !state.seeds.length) { costOut.textContent = "Run a simulation first."; return; }
+    const cost = {};
+    for (const [k, input] of Object.entries(costInputs)) if (input.value !== "") cost[k] = +input.value;
+    try {
+      const c = await api.costs(state.runId, cost);
+      costOut.replaceChildren(
+        el("p", { text: `Home batteries: ${fmt(c.storage_eur / 1e6, 1)} M€ for the median battery need.` }),
+        el("p", { text: c.trafo_eur === null ? "Transformers: enter a cost per size step (no sourced value yet)." : `Transformers: ${fmt(c.trafo_eur / 1e6, 1)} M€ (+1 size counts once, +2 or more counts twice).` }),
+        el("p", { text: `Stations above 1000 kVA (new MV connection, not priced): ${fmt(c.trafo_over_1000)}. Cable reinforcement: not in the live model.` }),
+        c.placeholders.length ? el("p", { class: "gs-hint", text: `Placeholders without source: ${c.placeholders.join(", ")}` }) : null);
+    } catch (e) { costOut.textContent = `Costs unavailable: ${e.message}`; }
+  }
+
+  api.options().then(o => {
+    state.options = o;
+    state.nSeeds = o.n_seeds;
+    costInputs.storage_eur_per_kwh.value = o.cost_defaults.storage_eur_per_kwh;
+    controls.replaceChildren(select("charging", o.charging), select("storage", o.storage), select("scenario", o.scenario),
+      select("weather_year", o.weather_year), select("pv_factor", o.pv_factor), runBtn);
+    status.textContent = "Choose a setting and press Run.";
+  }).catch(e => { status.textContent = `Simulation server not reachable (${e.message}).`; });
+  costOut.textContent = "Run a simulation first.";
+  redraw();
+
+  return { showStation: id => showDay(id, false), destroy() { state.stop?.(); map.destroy(); root.replaceChildren(); root.classList.remove("gs-root"); } };
+}
