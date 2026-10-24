@@ -14,6 +14,9 @@ wpev = legacy.load('steyr_wp_ev')
 HOURS = 8760
 DAYS = HOURS // 24
 DEADLINE_H = 7  # Ladeende spätestens am Folgetag 7 Uhr (gesteuertes Laden, WiNAP)
+# Szenarien der eingefrorenen Skripte plus ein mittleres 2040: Wärmepumpen wie 2030 (35 %), E-Autos wie 2040.
+# 2040 (70 %) ist der Stressfall für Klimaneutralität; 35 % liegt näher an UBA-WAM und TU-Wien-Szenarien.
+SCENARIOS = {**wpev.SCENARIOS, '2040m': {'wp_share': 0.35, 'ev_share': 0.60}}
 
 
 @dataclass
@@ -31,7 +34,7 @@ class EvEvents:
 
 def assign(p, scenario, rng):
     """Jahreswärme (kWh_th) und Anzahl E-Autos je Knoten wie ``steyr_wp_ev.assign``, LoD1-Wärme wo vorhanden."""
-    share = wpev.SCENARIOS[scenario]
+    share = SCENARIOS[scenario]
     hh = np.asarray(p.nodes_hh, dtype=int)
     fw = np.asarray(p.nodes_fw, dtype=bool)
     homes = hh > 0

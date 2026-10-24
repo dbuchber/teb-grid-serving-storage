@@ -14,7 +14,7 @@ from gridsim import control, legacy, metrics, profiles
 from gridsim.data import load_prepared
 
 WEATHER_YEARS = (2012, 2017, 2023)
-SCENARIOS = ('heute', '2030', '2040')
+SCENARIOS = ('heute', '2030', '2040m', '2040')
 PV_FACTORS = (1.0, 1.5, 2.0)
 CHARGING = ('uncontrolled', 'winap', 't3d', 'controlled', 'v2g')
 STORAGE = ('base', 'forecast', 'room')

@@ -9,7 +9,7 @@ const LABELS = {
   charging: { uncontrolled: "Uncontrolled charging", winap: "Winter low-price window 23:00 (WiNAP)", t3d: "Dynamic grid tariff per segment (T3d)",
     controlled: "Controlled charging (DSO limit)", v2g: "Controlled charging + V2G" },
   storage: { base: "Self-consumption", forecast: "Grid-serving (forecast)", room: "Grid-serving (night discharge)" },
-  scenario: { heute: "Today", 2030: "2030", 2040: "2040" },
+  scenario: { heute: "Today", 2030: "2030", "2040m": "2040 moderate (35 % heat pumps)", 2040: "2040 stress case (70 % heat pumps)" },
   weather_year: { 2023: "2023 (mild)", 2017: "2017", 2012: "2012 (cold spell)" },
   pv_factor: { 1: "PV as today", 1.5: "PV × 1.5", 2: "PV × 2" },
 };
@@ -45,7 +45,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     el("div", { class: "gs-split" }, mapBox, day),
     el("h4", { text: "Compare" }), el("div", { class: "gs-controls" }, compareDim, compareKpi, compareBtn), compareBox,
     el("h4", { text: "Storage vs. grid reinforcement" }), costBox,
-    el("p", { class: "gs-foot", text: "All values are model values from the Steyr simulation, not measurements. Assumptions: heat demand from DORIS LoD1/TABULA, COP after when2heat, EV 12 000 km/a, transformer sizing 2–3 kVA per home; line reinforcement needs a load flow and is not part of the live model." }));
+    el("p", { class: "gs-foot", text: "All values are model values from the Steyr simulation, not measurements. Assumptions: heat demand from DORIS LoD1/TABULA, heat-pump efficiency per when2heat, EV 12 000 km/a, transformer sizing 2–3 kVA per home; line reinforcement needs a load flow and is not part of the live model." }));
 
   const map = createStationMap(mapBox, stations || { features: [] }, id => showDay(id, true));
 

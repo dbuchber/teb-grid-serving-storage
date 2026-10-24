@@ -21,6 +21,15 @@ def test_assign_shares_and_fw():
     assert abs(share_ev - 0.60) < 0.03
 
 
+def test_assign_moderate_2040():
+    # mittleres Szenario: halb so viele Wärmepumpen wie im Stressfall 2040, E-Autos wie 2040
+    p = big_prepared(n_homes=4000)
+    heat, cars = profiles.assign(p, '2040m', np.random.default_rng(3))
+    homes = p.nodes_hh > 0
+    assert abs((heat[homes] > 0).mean() - 0.35) < 0.05
+    assert abs(cars.sum() / p.nodes_hh.sum() - 0.60) < 0.03
+
+
 def test_assign_pauschal_without_lod1():
     p = big_prepared(n_homes=200)
     p.nodes_heat_kwh[:] = np.nan

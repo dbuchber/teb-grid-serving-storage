@@ -71,3 +71,7 @@ def test_key_includes_model_version(monkeypatch):
     k1 = params().key()
     monkeypatch.setattr(runmod, 'MODEL_VERSION', 'other')
     assert params().key() != k1
+
+
+def test_params_accept_moderate_scenario():
+    RunParams(weather_year=2023, scenario="2040m", n_seeds=1).validate()
