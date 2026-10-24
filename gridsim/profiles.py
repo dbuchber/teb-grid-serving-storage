@@ -59,6 +59,36 @@ def station_sum(values_by_node, p):
                       else values_by_node @ _onehot(p), dtype=np.float32)
 
 
+def heat_pump_kw(temp_c, e, limits, shifts, share):
+    """Wie ``steyr_wp_ev.heat_pump_kw`` (gleiche Formeln), in float32 und mit Zeitversatz je Versatzgruppe.
+
+    Die Schleife je Station ist speicherbandbreitengebunden; float32 und ``np.roll`` statt Fancy-Indexing
+    halbieren die bewegten Daten.
+    """
+    f = np.float32
+    e, limits, share = e.astype(f), limits.astype(f), share.astype(f)
+    t_eff = wpev.effective_temp(np.asarray(temp_c, dtype=float)).astype(f)
+    degree = np.maximum(limits[None, :] - t_eff[:, None], f(0))
+    dsum = np.maximum(degree.sum(axis=0), f(1e-9))
+    dhw = (np.tile(wpev.DHW_PROFILE, HOURS // 24) / (HOURS // 24)).astype(f)
+    space = degree * ((1 - share) * e / dsum)[None, :]
+    water = dhw[:, None] * (share * e)[None, :]
+    q_max = ((1 - share) * np.maximum(limits - f(wpev.BIVALENT_C), 0) / dsum + share * f(dhw.max())) * e
+    heat = space + water
+    hp_share = np.minimum(heat, q_max[None, :])
+    np.divide(hp_share, heat, out=hp_share, where=heat > 0)
+    hp_share[heat <= 0] = 1
+    cop_s = wpev.cop(t_eff.astype(float)).astype(f)
+    cop_w = wpev.cop(t_eff.astype(float), wpev.COP_DHW).astype(f)
+    el = hp_share * (space / cop_s[:, None] + water / cop_w[:, None]) + (1 - hp_share) * heat
+    shifts = np.asarray(shifts)
+    for s in np.unique(shifts):
+        if s:
+            cols = np.flatnonzero(shifts == s)
+            el[:, cols] = np.roll(el[:, cols], int(s), axis=0)
+    return el
+
+
 def heat_pump(p, heat_kwh, seed):
     """Wärmepumpenlast (kW): Stationssumme (8760, S) und Matrix der Speicherknoten (8760, K).
 
@@ -77,7 +107,7 @@ def heat_pump(p, heat_kwh, seed):
     storage = np.zeros((HOURS, len(storage_idx)), dtype=np.float32)
     for c in np.unique(cells[heat > 0]):
         idx = np.flatnonzero((cells == c) & (heat > 0))
-        el = wpev.heat_pump_kw(temp[:, c], heat[idx], limits[idx], shifts[idx], dhw[idx])
+        el = heat_pump_kw(temp[:, c], heat[idx], limits[idx], shifts[idx], dhw[idx])
         st_sum += np.asarray(el @ _onehot(p, idx), dtype=np.float32)
         for j, n in enumerate(idx):
             if n in pos:
