@@ -92,8 +92,11 @@ FEEDER_NODE_OFFSET_M = [(40, 15), (80, -15), (120, 15), (160, -15), (-60, 12), (
 FEEDER_LEGACY_STATION = [0, 2, 3]   # Legacy-Station 1 hat keine Knoten und fällt beim Verdichten weg
 
 
-def fake_build_members_factory(offsets=FEEDER_NODE_OFFSET_M):
-    """``build_members``-Ersatz mit Stationen und Knoten um ROADS_CENTER (EPSG:31287)."""
+def fake_build_members_factory(offsets=FEEDER_NODE_OFFSET_M, extra=()):
+    """``build_members``-Ersatz mit Stationen und Knoten um ROADS_CENTER (EPSG:31287).
+
+    ``extra``: weitere Knoten (Versatz, hh, kWp, Station 0–2) hinter den zehn Standardknoten.
+    """
     from gridsim.feeders.roads import TO_LAMBERT
 
     def fake_build_members(inp):
@@ -105,6 +108,8 @@ def fake_build_members_factory(offsets=FEEDER_NODE_OFFSET_M):
         kwp = [8, 10, 0, 0, 6, 0, 0, 0, 60, 40]
         nodes = [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
                   'station': FEEDER_LEGACY_STATION[s]} for off, h, k, s in zip(offsets, hh, kwp, FEEDER_NODE_STATION)]
+        nodes += [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
+                   'station': FEEDER_LEGACY_STATION[s]} for off, h, k, s in extra]
         return stations, st_xy, ['Steyr'] * 4, nodes
 
     return fake_build_members

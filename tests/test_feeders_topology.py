@@ -95,17 +95,30 @@ def test_feeder_split_limits_buildings(roads):
     assert len(counts) >= 3
 
 
-def test_long_feeder_marked(roads):
+def test_long_feeder_single_building_is_tail(roads):
+    """Ein Gebäude jenseits der Grenze: Abgang ist Ausläufer, nicht markiert; abgeteilt vom nahen Abgang."""
     xy = np.vstack([along('ost', 10.0 * np.arange(1, 9)), along('ost', [1500.0])])
     g = build(xy, roads=roads)
     assert g.area == 'stadt'
-    assert g.marked.any()
+    assert not g.marked.any() and g.tail.sum() == 1
     r = reach(g)
     assert r[-1] > AREAS['stadt'].max_feeder_m
-    # Teilung trennt das ferne Gebäude ab: nur sein Abgang ist markiert, der nahe nicht
     d = g.downstream.toarray()
     far_feeders = set(g.feeder[d[:, -1] > 0])
-    assert far_feeders == set(np.flatnonzero(g.marked))
+    assert far_feeders == set(np.flatnonzero(g.tail))
+    assert not set(g.feeder[d[:, 0] > 0]) & far_feeders
+
+
+def test_long_feeder_marked(roads):
+    """Ab TAIL_MIN_HOMES Wohngebäuden jenseits der Grenze: markiert, kein Ausläufer."""
+    from gridsim.feeders.topology import TAIL_MIN_HOMES
+    xy = np.vstack([along('ost', 10.0 * np.arange(1, 9)), along('ost', 1500.0 + 20.0 * np.arange(TAIL_MIN_HOMES))])
+    g = build(xy, roads=roads)
+    assert g.area == 'stadt'
+    assert g.marked.any() and not g.tail.any()
+    d = g.downstream.toarray()
+    far_feeders = set(g.feeder[d[:, -1] > 0])
+    assert far_feeders <= set(np.flatnonzero(g.marked))
     assert not set(g.feeder[d[:, 0] > 0]) & far_feeders
 
 

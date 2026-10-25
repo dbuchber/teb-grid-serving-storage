@@ -38,8 +38,8 @@ def grids_for(st_xy, xy, st_of, roads, hh=None):
 
 
 def test_extra_station_splits_long_feeder(roads):
-    """Stadtstation mit einem Gebäude 1 500 m entfernt: eine Zusatzstation, danach nichts mehr markiert."""
-    xy = np.vstack([east(10.0 * np.arange(1, 9)), east([1500.0])])
+    """Stadtstation mit 8 Gebäuden 1 500 m entfernt: eine Zusatzstation, danach nichts mehr markiert."""
+    xy = np.vstack([east(10.0 * np.arange(1, 9)), east(1500.0 + 20.0 * np.arange(8))])
     st_xy = C[None, :]
     st_of = np.zeros(len(xy), int)
     grids = grids_for(st_xy, xy, st_of, roads)
@@ -48,18 +48,20 @@ def test_extra_station_splits_long_feeder(roads):
     new = plan_extra(st_xy, xy, np.ones(len(xy), int), st_of, grids, roads=roads, station_ids=['way/1'])
     assert len(new) == 1
     site = np.array([new[0]['x'], new[0]['y']])
-    assert np.hypot(*(site - xy[-1])) <= SNAP_M                  # am Gebäude, auf die Straße gezogen
+    assert np.hypot(*(xy[8:] - site).T).min() <= SNAP_M          # an einem Gebäude, auf die Straße gezogen
     assert np.min(np.hypot(*(roads.xy - site).T)) < 1e-6
+    assert sorted(new[0]['members'].tolist()) == list(range(8, 16)) and new[0]['n_homes'] == 8
 
     all_xy = np.vstack([st_xy, site])
-    st_of2, info = reassign(all_xy, xy, roads)
-    assert st_of2.tolist() == [0] * 8 + [1]
+    st_of2, info = reassign(all_xy, xy, roads, current=st_of, movable=new[0]['members'])
+    assert st_of2.tolist() == [0] * 8 + [1] * 8
     assert info['air'] == info['air_far'] == 0
     assert marked_share(grids_for(all_xy, xy, st_of2, roads)) == 0.0
 
 
 def test_new_station_ids_and_flags(roads):
-    xy = np.vstack([east(10.0 * np.arange(1, 9)), east([1500.0, 1520.0]), east([-1600.0, -1620.0])])
+    xy = np.vstack([east(10.0 * np.arange(1, 9)), east(1500.0 + 20.0 * np.arange(6)),
+                    east(-1600.0 - 20.0 * np.arange(6))])
     st_xy = C[None, :]
     st_of = np.zeros(len(xy), int)
     grids = grids_for(st_xy, xy, st_of, roads)
@@ -101,6 +103,49 @@ def test_compact_cluster_of_100_gives_one_station(roads):
     assert all(s['parent'] == 0 for s in new)                     # ohne station_ids: Index der Elternstation
 
 
+def ort_station(tail):
+    """Ortsstation (16 Gebäude, 40 m Abstand beidseits der Kreuzung) plus ``tail`` Gebäude ab 1 500 m."""
+    near = np.vstack([east(40.0 * np.arange(1, 9)), east(-40.0 * np.arange(1, 9))])
+    return np.vstack([near, east(1500.0 + 40.0 * np.arange(tail))])
+
+
+def test_tail_of_three_gets_no_station(roads):
+    """3 Gebäude 1 500 m draußen an einer Ortsstation: Ausläufer, nicht markiert, keine Zusatzstation."""
+    xy = ort_station(3)
+    st_of = np.zeros(len(xy), int)
+    grids = grids_for(C[None, :], xy, st_of, roads)
+    grid, sized = grids[0][0], grids[0][1]
+    assert grid.area == 'ort'
+    assert grid.tail.sum() >= 1 and not grid.marked.any() and not sized.marked.any()
+    assert marked_share(grids) == 0.0
+    skipped = []
+    assert plan_extra(C[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads, skipped=skipped) == []
+
+
+def test_tail_of_eight_gets_station(roads):
+    xy = ort_station(8)
+    st_of = np.zeros(len(xy), int)
+    grids = grids_for(C[None, :], xy, st_of, roads)
+    assert grids[0][0].area == 'ort' and grids[0][0].marked.any()
+    new = plan_extra(C[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads)
+    assert len(new) == 1 and sorted(new[0]['members'].tolist()) == list(range(16, 24))
+
+
+def test_small_cluster_skipped(roads):
+    """Cluster unter 6 Wohngebäuden entsteht nicht, auch wenn der Abgang markiert ist (PV-Hallen zählen nicht)."""
+    xy = ort_station(8)
+    hh = np.ones(len(xy), int)
+    hh[18:] = 0                                                   # nur 2 Wohngebäude draußen, 6 Hallen
+    st_of = np.zeros(len(xy), int)
+    zeros = np.zeros(len(xy))
+    grids = build_grids(C[None, :], xy, hh, zeros, st_of, (zeros, zeros, zeros), roads, 1)
+    assert not grids[0][0].marked.any()                           # nach Wohngebäuden: Ausläufer
+    grids[0][0].marked[:] = grids[0][0].tail                      # erzwungen markiert: Cluster trotzdem zu klein
+    skipped = []
+    assert plan_extra(C[None, :], xy, hh, st_of, grids, roads=roads, skipped=skipped) == []
+    assert skipped == [8]
+
+
 def test_reassign_moves_only_marked_nodes(roads):
     """Nicht markierte Knoten behalten ihre Station, auch wenn eine neue Station näher liegt."""
     st_xy = np.vstack([C, east([1000.0])[0]])
@@ -125,13 +170,23 @@ def test_reassign_air_fallbacks(roads):
 # ---------------------------------------------------------------- Ende-zu-Ende mit Fake-Prepared
 
 FAR_OFFSETS = list(FEEDER_NODE_OFFSET_M)
-FAR_OFFSETS[3] = (1500, -15)            # Station 0 (Typ streu, Grenze 1 000 m) bekommt ein fernes Gebäude
+FAR_OFFSETS[3] = (1500, -15)            # Station 0 bekommt 7 ferne Wohngebäude (Knoten 3 und 10–15)
+EXTRA = [((1500 + 30 * k, 15 * (-1) ** k), 1, 0.0, 0) for k in range(1, 7)]
+
+
+def extend_prepared(prepared):
+    """Fake-Prepared um die Knoten aus EXTRA erweitern (Kopien von Knoten 3, Station 0)."""
+    for d in sorted(p for p in prepared.iterdir() if p.name.isdigit()):
+        for name in ('nodes_station', 'nodes_hh', 'nodes_kwp_bins', 'nodes_kwh', 'nodes_fw', 'nodes_cell',
+                     'nodes_heat_kwh', 'nodes_dhw'):
+            a = np.load(d / f'{name}.npy')
+            np.save(d / f'{name}.npy', np.concatenate([a, np.repeat(a[3:4], len(EXTRA), axis=0)]))
 
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     sim = legacy.load('steyr_sim_variant_a')
-    fbm = fake_build_members_factory(FAR_OFFSETS)
+    fbm = fake_build_members_factory(FAR_OFFSETS, extra=EXTRA)
     monkeypatch.setattr(sim, 'build_members', fbm)
     inp = tmp_path / 'input'
     inp.mkdir()
@@ -139,6 +194,7 @@ def setup(tmp_path, monkeypatch):
     prepared = tmp_path / 'prepared'
     for y in (2012, 2023):
         write_fake_prepared(prepared, y)
+    extend_prepared(prepared)
     align_station_positions(prepared, fbm)
     return inp, prepared, tmp_path / 'prepared-ns'
 
@@ -174,7 +230,7 @@ def test_variant_leaves_source_untouched(setup):
     assert report['marked']['stations_any'] == 0
     assert report['cable_share']['acceptance'] == 'by_route_length'
     pb = report['per_building']
-    assert pb['buildings'] == 8 and pb['buildings_per_station']['n'] == report['n_stations']
+    assert pb['buildings'] == 14 and pb['buildings_per_station']['n'] == report['n_stations']
     assert pb['route_m_per_building'] > 0
     with pytest.raises(ValueError):
         prepare_extra_stations(inp, prepared, prepared)           # nie in die Quelle schreiben
@@ -192,7 +248,9 @@ def test_new_station_in_variant(setup):
     st = np.load(out / '2012' / 'nodes_station.npy')
     assert st.dtype == np.int32 and st[3] == rows.index(new[0])   # fernes Gebäude an der Zusatzstation
     src_st = np.load(prepared / '2012' / 'nodes_station.npy')
-    keep = np.arange(len(st)) != 3                                # nicht markierte Knoten behalten ihre Station
+    far = np.array([3] + list(range(10, 16)))
+    assert set(st[far]) == {rows.index(new[0])}
+    keep = ~np.isin(np.arange(len(st)), far)                      # nicht markierte Knoten behalten ihre Station
     assert [rows[i]['id'] for i in st[keep]] == [src[i]['id'] for i in src_st[keep]]
     v = json.loads((out / 'variant.json').read_text())
     assert [s['id'] for s in v['stations']] == [r['id'] for r in rows]

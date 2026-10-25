@@ -9,8 +9,10 @@ unverändert. Ablauf (``prepare_extra_stations``):
    × 30; Controller-Entscheidung, Netz OÖ im Mittel ca. 58 Anlagen je Station) und kein Knoten weiter
    als ``max_feeder_m`` / 1,2 (Luftlinie, Umwegfaktor) vom Clusterzentrum liegt. Standort = Wohngebäude nächst
    dem Zentrum (nur Hallen im Cluster: Knoten nächst dem Zentrum), auf den nächsten Straßenknoten gezogen, wenn
-   einer höchstens ``SNAP_M`` entfernt ist.
-3. ``reassign``: nur Knoten markierter Abgänge (Gebäude und PV-Hallen) wechseln, und zwar zur nächsten Station
+   einer höchstens ``SNAP_M`` entfernt ist. Cluster mit weniger als ``TAIL_MIN_HOMES`` Wohngebäuden bekommen keine
+   Station (Controller 25.10.2026); ihre Knoten bleiben an der bisherigen Station. Ausläufer (``StationGrid.tail``)
+   zählen nicht als markiert und werden nicht geclustert.
+3. ``reassign``: nur Knoten der Cluster mit neuer Station (Gebäude und PV-Hallen) wechseln, und zwar zur nächsten Station
    (alt + neu) entlang der Straße (``RoadGraph.nearest_station``); ohne Straßenverbindung nächste Station in
    Luftlinie (≤ 600 m wie ``build_members``; weiter weg trotzdem, gezählt). Alle übrigen Knoten behalten ihre
    Station. Kein Knoten bleibt ohne Station.
@@ -39,7 +41,7 @@ from gridsim import legacy
 from gridsim.feeders.area import AREAS
 from gridsim.feeders.prepare import (DESIGN_YEAR, TO_WGS84, VARIANT_FILE, build_grids, feeder_context, marked_share,
                                      node_feeder, prepare_feeders)
-from gridsim.feeders.topology import LINE_DETOUR, MAX_BUILDINGS
+from gridsim.feeders.topology import LINE_DETOUR, MAX_BUILDINGS, TAIL_MIN_HOMES
 
 ID_FORMAT = 'demo:steyr:ns-{:03d}'
 SNAP_M = 50.0           # Standort auf Straßenknoten ziehen, wenn höchstens so weit entfernt
@@ -87,18 +89,13 @@ def _marked_local(grid, sized):
     return np.flatnonzero(bad[node_feeder(grid)])
 
 
-def marked_nodes(grids: dict) -> np.ndarray:
-    """Globale Knotenindizes auf markierten Abgängen aller Stationen (dürfen die Station wechseln)."""
-    parts = [np.asarray(g[0].node_index)[_marked_local(g[0], g[1])] for g in grids.values()]
-    return np.sort(np.concatenate(parts)).astype(int) if parts else np.zeros(0, int)
-
-
 def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None, station_ids=None,
-               start=1) -> list[dict]:
+               start=1, skipped=None) -> list[dict]:
     """Neue Stationsstandorte für alle Stationen mit markiertem Abgang (siehe Moduldoku, Schritt 2).
 
     ``grids``: {s: (StationGrid, SizedGrid, ...)}; Knotenarrays global. ``parent`` ist ``station_ids[s]`` bzw. der
-    Stationsindex ohne ``station_ids``. IDs fortlaufend ab ``start``.
+    Stationsindex ohne ``station_ids``. IDs fortlaufend ab ``start``. ``members``: globale Knotenindizes des
+    Clusters (dürfen die Station wechseln). Mit ``skipped`` (Liste) werden verworfene Cluster dort gezählt.
     """
     xy = np.asarray(nodes_xy, dtype=float).reshape(-1, 2)
     hh = np.asarray(nodes_hh)
@@ -113,7 +110,12 @@ def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None
         for members, centre in _clusters(xy[idx], radius, SEED + int(s)):
             cand = idx[members]
             homes = cand[hh[cand] > 0]
-            cand = homes if len(homes) else cand
+            if len(homes) < TAIL_MIN_HOMES:                  # Ausläufer: keine eigene Station
+                if skipped is not None:
+                    skipped.append(len(cand))
+                continue
+            members_global = cand.copy()
+            cand = homes
             site = xy[cand[int(np.argmin(np.hypot(*(xy[cand] - centre).T)))]].copy()
             if roads is not None:
                 d, t = roads.tree.query(site)
@@ -122,7 +124,8 @@ def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None
             lon, lat = TO_WGS84.transform(site[0], site[1])
             new.append({'id': ID_FORMAT.format(start + len(new)), 'x': float(site[0]), 'y': float(site[1]),
                         'lon': float(lon), 'lat': float(lat), 'synthetic': 1,
-                        'parent': station_ids[s] if station_ids is not None else int(s)})
+                        'parent': station_ids[s] if station_ids is not None else int(s),
+                        'members': members_global, 'n_homes': int(len(homes))})
     return new
 
 
@@ -222,9 +225,10 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
         if k > 1 and shares[f'pass{k - 1}'] <= MARKED_LIMIT:
             break
         st_xy = np.array([[s['x'], s['y']] for s in stations], dtype=float)
+        skipped = []
         new = plan_extra(st_xy, xy, hh, st_of, grids, roads=roads, station_ids=[s['id'] for s in stations],
-                         start=next_id)
-        movable = marked_nodes(grids)
+                         start=next_id, skipped=skipped)
+        movable = np.concatenate([s['members'] for s in new]) if new else np.zeros(0, int)
         uw = {s['id']: s['uw'] for s in stations}
         stations += [{**s, 'uw': uw[s['parent']], 'old': False} for s in new]
         next_id += len(new)
@@ -242,7 +246,8 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
         st_of = remap[st_of]
         grids = build_grids(st_xy[keep], xy, hh, kwp, st_of, loads, roads, len(stations))
         shares[f'pass{k}'] = round(marked_share(grids), 4)
-        passes.append({'pass': k, 'planned': len(new), 'dropped': len(gone), 'stations': len(stations),
+        passes.append({'pass': k, 'planned': len(new), 'skipped_small_clusters': len(skipped),
+                       'skipped_nodes': int(sum(skipped)), 'dropped': len(gone), 'stations': len(stations),
                        'assignment': info, 'marked_share': shares[f'pass{k}']})
 
     n_old = len(p.stations)
@@ -254,7 +259,8 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
                                         'definition': 'bewegte Knoten ohne Straßenverbindung, Summe der Durchgänge'},
              'nodes_moved': int(sum(a != b for a, b in zip(
                  [p.stations[i]['id'] for i in ctx['st_of']], [stations[i]['id'] for i in st_of]))),
-             'rule': {'max_cluster': MAX_CLUSTER, 'moves': 'nur Knoten markierter Abgänge', 'radius': 'max_feeder_m / 1,2', 'snap_m': SNAP_M,
+             'rule': {'max_cluster': MAX_CLUSTER, 'min_homes': TAIL_MIN_HOMES,
+                      'moves': 'nur Knoten der Cluster mit neuer Station', 'radius': 'max_feeder_m / 1,2', 'snap_m': SNAP_M,
                       'air_max_m': AIR_MAX_M, 'seed': SEED, 'max_passes': max_passes}}
     write_variant(src, out, stations, st_of, meta={'report': extra})
     feeders = prepare_feeders(inp, out)

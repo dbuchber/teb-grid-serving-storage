@@ -4,10 +4,10 @@ Eingaben: Knoten- und Stationskoordinaten aus ``build_members`` (eingefroren, wi
 vorbereiteten Arrays in ``prepared/<jahr>/`` und das Straßennetz ``osm_roads.json`` im Eingabeverzeichnis
 (fehlt es, entstehen alle Netze per Luftlinie). Ausgabe nach ``prepared/feeders/``:
 
-- ``<station>.npz``: Felder von ``StationGrid`` und ``SizedGrid``; ``downstream`` als CSR-Arrays
+- ``<station>.npz``: Felder von ``StationGrid`` (einschließlich ``tail``, Ausläufer) und ``SizedGrid``; ``downstream`` als CSR-Arrays
   (``ds_data``, ``ds_indices``, ``ds_indptr``, ``ds_shape``), Geometrie als Punktliste mit Versatz je Abschnitt;
   dazu die Auslegungsflüsse ``p_load_kw``/``p_feed_kw`` (nur zur Nachvollziehbarkeit).
-- ``index.json``: je Station Gebietstyp, Abgänge, Markierungen, Trunk- und Freileitungslänge.
+- ``index.json``: je Station Gebietstyp, Abgänge, Markierungen, Ausläufer (``tail``), Trunk- und Freileitungslänge.
 - ``lines.geojson``: alle Abschnitte in WGS84.
 - ``report.json``: Regionswerte (Prüfziele Spec 4.2, Kabelanteil 4.1).
 - ``manifest.json``: SHA256 der Eingaben und Schwellen.
@@ -31,7 +31,7 @@ from gridsim.data import load_prepared
 from gridsim.feeders.area import AREAS
 from gridsim.feeders.roads import RoadGraph
 from gridsim.feeders.sizing import SizedGrid, design_flows, size
-from gridsim.feeders.topology import StationGrid, build_station_grid
+from gridsim.feeders.topology import TAIL_MIN_HOMES, StationGrid, build_station_grid
 
 DESIGN_YEAR = 2012
 DESIGN_SCENARIO = 'heute'
@@ -159,7 +159,7 @@ def _save_station(path, grid: StationGrid, sized: SizedGrid, p_load=None, p_feed
     np.savez_compressed(
         path, station=np.int64(grid.station), area=np.str_(grid.area), node_index=grid.node_index,
         parent=grid.parent, length_m=grid.length_m, feeder=grid.feeder, service=grid.service,
-        overhead=grid.overhead, marked=grid.marked, ds_data=ds.data, ds_indices=ds.indices, ds_indptr=ds.indptr,
+        overhead=grid.overhead, marked=grid.marked, tail=grid.tail, ds_data=ds.data, ds_indices=ds.indices, ds_indptr=ds.indptr,
         ds_shape=np.array(ds.shape, dtype=np.int64), geom_coords=coords, geom_offsets=np.concatenate([[0], np.cumsum(lens)]),
         types=np.array(sized.types, dtype=str), parallel=sized.parallel, i_max_a=sized.i_max_a, r_ohm=sized.r_ohm,
         x_ohm=sized.x_ohm, du_load_pct=sized.du_load_pct, du_feed_pct=sized.du_feed_pct, sized_marked=sized.marked,
@@ -174,7 +174,8 @@ def _load_station(path):
     geometry = [coords[off[j]:off[j + 1]] for j in range(len(off) - 1)]
     grid = StationGrid(station=int(z['station']), area=str(z['area']), node_index=z['node_index'],
                        parent=z['parent'], length_m=z['length_m'], feeder=z['feeder'], service=z['service'],
-                       overhead=z['overhead'], downstream=ds, marked=z['marked'], geometry=geometry)
+                       overhead=z['overhead'], downstream=ds, marked=z['marked'], geometry=geometry,
+                       tail=z['tail'] if 'tail' in z.files else None)
     sized = SizedGrid(types=[str(t) for t in z['types']], parallel=z['parallel'], i_max_a=z['i_max_a'],
                       r_ohm=z['r_ohm'], x_ohm=z['x_ohm'], du_load_pct=z['du_load_pct'],
                       du_feed_pct=z['du_feed_pct'], marked=z['sized_marked'])
@@ -239,11 +240,13 @@ def _station_summary(grid, sized, n_buildings=None):
         'n_buildings': None if n_buildings is None else int(n_buildings),
         'marked_long': int(grid.marked.sum()), 'marked_sizing': int(sized.marked.sum()),
         'marked': int((grid.marked | sized.marked).sum()),
+        'tail': int((grid.tail & ~sized.marked).sum()),
         'trunk_m': round(float(sys_len[trunk].sum()), 1),
         'overhead_m': round(float(sys_len[trunk & grid.overhead].sum()), 1),
         'route_m': round(route_c + route_o, 1), 'route_overhead_m': round(route_o, 1),
         'service_m': round(float(sys_len[grid.service].sum()), 1),
         'reach_m': [round(float(r), 1) for r in reach[has_nodes]],
+        'tail_reach_m': [round(float(r), 1) for r in reach[has_nodes & grid.tail & ~sized.marked]],
         'du_load_max_pct': round(float(sized.du_load_pct.max()), 2) if n_feeder else 0.0,
     }
 
@@ -300,8 +303,14 @@ def _report(summaries, grids):
                    'stations_any_share': round(st_any / n, 4) if n else 0.0,
                    'feeders_long': sum(x['marked_long'] for x in s),
                    'feeders_sizing': sum(x['marked_sizing'] for x in s), 'feeders_any': sum(x['marked'] for x in s),
-                   'definition': 'Station mit mindestens einem Abgang in StationGrid.marked (zu lang) '
-                                 'oder SizedGrid.marked (Bemessung scheitert)'},
+                   'definition': 'Station mit mindestens einem Abgang in StationGrid.marked (zu lang, ab '
+                                 f'{TAIL_MIN_HOMES} Wohngebäuden jenseits der Grenze) oder SizedGrid.marked '
+                                 '(Bemessung scheitert); Ausläufer zählen nicht'},
+        'tails': {'stations': int(sum(x['tail'] > 0 for x in s)), 'feeders': int(sum(x['tail'] for x in s)),
+                  'reach_m': _stats([r for x in s for r in x['tail_reach_m']]),
+                  'definition': f'Abgang zu lang, aber weniger als {TAIL_MIN_HOMES} Wohngebäude jenseits der '
+                                'Grenze und Bemessung erfolgreich (StationGrid.tail); wie jeder Abgang bemessen, '
+                                'nicht markiert'},
         'cable_share': {
             'by_cable_length': round(1 - over / trunk, 4) if trunk else None,
             'by_route_length': round(1 - route_o / route, 4) if route else None,
@@ -392,7 +401,8 @@ def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
         grids[s] = (grid, sized)
         summaries[s] = _station_summary(grid, sized, int((ctx['hh'][grid.node_index] > 0).sum()))
 
-    index = {str(s): {k: v for k, v in x.items() if k != 'reach_m'} for s, x in summaries.items()}
+    index = {str(s): {k: v for k, v in x.items() if k not in ('reach_m', 'tail_reach_m')}
+             for s, x in summaries.items()}
     (out / 'index.json').write_text(json.dumps(index, ensure_ascii=False))
     (out / 'lines.geojson').write_text(json.dumps(_geojson(grids), ensure_ascii=False))
     (out / 'report.json').write_text(json.dumps(_report(summaries, grids), ensure_ascii=False, indent=1))
