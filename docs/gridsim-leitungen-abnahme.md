@@ -1,0 +1,477 @@
+# Abnahme NS-Leitungen in gridsim (25.10.2026)
+
+Abnahmelauf nach Spec `docs/superpowers/specs/2026-10-25-ns-leitungen-design.md` § 6 auf hetzner, Stand
+`feat/ns-leitungen` (Commits bis `ffb919d` plus diesem Bericht), `MODEL_VERSION` `2026-10-26.1`. Alle Zahlen sind
+Modellwerte aus einem **synthetischen** Niederspannungsnetz, keine Messungen.
+
+## Kurzfassung
+
+- **Die Abnahmegrenze „heute“ ist nicht bestanden.** Auf `prepared-ns` (465 Stationen) liegen im P90 über
+  20 Seeds **105 Stationen über 100 %** und **63 über 120 %** (Regel: höchstens 5 von 257 über 100 %, keine
+  über 120 %). Auch anteilig umgerechnet (9 von 465) ist die Grenze weit verfehlt. Die Bemessungsregel wurde
+  **nicht** geändert; die Entscheidung liegt beim Controller (Spec Entscheidung 6, Brief Step 3).
+- **Ursache:** Alle 105 Stationen scheitern an einem Strang-Abschnitt **NAYY 4x50** in Bezugsrichtung an einem
+  Winterabend (18–19 Uhr), 71 in Gebietstyp stadt, 34 in ort, keine in streu. In der Spitzenstunde liegt der
+  Abschnittsfluss im Median bei 121 kW, die Auslegung bei 56 kW, die Grenze bei 97 kW. Zwei Teile der
+  Auslegungsregel unterschätzen die Last, die gridsim danach bewertet: der Haushaltsanteil
+  (n · 2,0 kW · g(n) geht für große n gegen 0,14 kW je Haushalt, das H0-Profil von gridsim hat 0,79 kW Spitze je
+  Haushalt) und Wärmepumpen/E-Autos als Erwartungswert, während ein Seed ganze
+  Geräte an einzelne Knoten setzt (Szenario heute: rund 15 % Wärmepumpen, 8 % E-Autos je Haushalt).
+- Netzbau plausibel: Kabelanteil nach Trassenlänge 74,3 % (Band 74–84 %), markierte Abgänge an 6,2 % der
+  Stationen (Grenze 10 %). Abgänge je Station 4,36 (Ziel 3,4–3,8) und Trasse je Station 2,06 km (Ziel ca. 2,7 km)
+  liegen daneben, weil es mit 465 statt 257 Stationen mehr, aber kleinere Netze gibt.
+- 2030 ist an mehr Stationen nur die Leitung als nur der Trafo überlastet (Wetter 2012: 114 gegen 32 von 465),
+  2040 meist beide (285). Leitungsbewusste Steuerung senkt die Stationen mit Leitungsüberlast 2030 um 44–61 %
+  (gesteuert) bzw. 73–91 % (V2G), auf Kosten ungeladener E-Auto-Energie; Netzspeicher wirken wenig (−8 bis −10 %)
+  und werden unrealistisch groß (2040, 2012: 11 GWh). Wegen der verfehlten
+  Abnahmegrenze sind die Leitungszahlen zu hoch (das Netz ist heute schon zu schwach bemessen); sie zeigen die
+  Richtung, nicht die Größe.
+- pandapower-Vergleich: Die radiale Summation unterschätzt den Strom gegenüber dem Lastfluss im Mittel um 1,4
+  Prozentpunkte (heute) bzw. 6,4 Prozentpunkte (2040), relativ im Median um 4 % bzw. 12 %; die Abweichung wächst mit
+  dem Spannungsfall.
+- Im Zuge der Abnahme gefunden und behoben: Scheinüberlast am Trafo durch Rundung im Grenzmodus `trafo+leitung`
+  (Commit `66ca7b7`, siehe unten).
+
+## Was gerechnet wurde
+
+Arbeitsordner `/data/infra-kg-austria/work/gridsim-leitungen/` (Code per rsync aus dem Worktree, eigene Caches
+`cache-ns/` und `cache-orig/`; der Live-Ordner `work/gridsim` wurde nicht berührt). Höchstens 8 Worker,
+`OMP_NUM_THREADS=1`.
+
+| Lauf | Daten | Einstellungen | Seeds |
+|---|---|---|---|
+| Abnahmegrenze | `prepared-ns` | heute, PV 1,0, Speicher base, ungesteuert, `trafo`, ohne Netzspeicher; 2012, 2017, 2023 | 20 |
+| Abnahmegrenze und Trafo-Vergleich | `prepared` (257 Stationen, Netze nach Freileitungs-Korrektur) | wie oben, dazu 2030/2040 ungesteuert 2012/2023 | 20 |
+| Modusvergleich | `prepared-ns` | 2012, 2023 × 2030, 2040 × ungesteuert (`trafo`, Netzspeicher aus/an) | 20 |
+| Modusvergleich | `prepared-ns` | 2012, 2023 × 2030, 2040 × gesteuert, V2G × `trafo`, `trafo+leitung` × Netzspeicher aus/an | 20 |
+| Stichprobe, pandapower | `prepared-ns` | 9 Stationen, heute und 2040 (2012, ungesteuert, Seed 0), 24 stärkste Stunden | 1 |
+
+`trafo+leitung` entfällt für ungesteuertes Laden (gleiche Rechnung wie `trafo`). Befehle:
+
+```sh
+uv run python -m gridsim batch --prepared prepared-ns --cache cache-ns --years 2012 2017 2023 --scenarios heute \
+  --charging uncontrolled --seeds 20 --workers 8
+uv run python -m gridsim batch --prepared prepared-ns --cache cache-ns --years 2012 --scenarios 2030 2040 \
+  --charging controlled v2g --limits trafo trafo+leitung --netzspeicher off on --seeds 20 --workers 4   # je Wetterjahr parallel
+uv run python -m gridsim lines-report --prepared prepared-ns --cache cache-ns --report out/lines-report-ns.md
+uv run python tools/pp_compare.py export --prepared prepared-ns --year 2012 --scenario heute --seed 0 \
+  --stations 63 109 259 261 352 441 167 117 433 --out out/pp/heute --svg out/svg
+py.sh gridsim-ppcompare/pp_compare.py compare --in gridsim-ppcompare/heute --out gridsim-ppcompare/heute.json
+```
+
+Die Matrix lief zuerst mit 10 Seeds und wurde dann auf 20 aufgefüllt (die ersten 10 aus dem Cache); alle
+Einstellungen in diesem Bericht haben 20 Seeds.
+
+### Laufzeiten
+
+Ein Seed, ein Prozess, Wetter 2023, 465 Stationen (hetzner, geteilt mit anderen Projekten, Last 20–40):
+
+| Einstellung | Plan Netzspeicher | Seed |
+|---|---|---|
+| heute, ungesteuert | – | 9,8 s |
+| 2040, ungesteuert | – | 14,6 s |
+| 2040, gesteuert, `trafo` | – | 21,7 s |
+| 2040, gesteuert, `trafo+leitung` | – | 64,0 s |
+| 2040, V2G, `trafo` | – | 22,1 s |
+| 2040, V2G, `trafo+leitung` | – | 113,3 s |
+| 2040, ungesteuert, Netzspeicher an | 56,6 s | 100,9 s |
+| 2040, gesteuert, `trafo+leitung`, Netzspeicher an | 139,5 s | 73,1 s |
+
+Batch mit 8 Workern: 20 Seeds heute in 105–111 s je Wetterjahr (465 Stationen) bzw. 95–113 s (257 Stationen);
+2030/2040 ungesteuert mit 4 Workern 222–254 s. Mehr Worker bringen wenig, weil die Speicherbandbreite sättigt
+(ein Seed braucht mit 8 Workern 40–60 s statt 10–15 s). Weitere Wandzeiten der Matrix im Abschnitt
+„Vergleich der Modi“.
+
+## Plausibilität des Netzbaus (`prepared-ns`)
+
+| Kennzahl | Wert | Ziel | im Ziel |
+|---|---|---|---|
+| Kabelanteil nach Trassenlänge (Abnahmegröße) | 74,3 % | 79 % (Band 74–84 %) | ja |
+| Kabelanteil nach Kabellänge | 72,2 % | nur Information | – |
+| NS-Trasse je Station | 2,06 km | ca. 2,7 km | – |
+| NS-Kabellänge je Station (Systeme einzeln) | 3,10 km | ca. 2,7 km | – |
+| Abgänge je Station (Mittel / Median) | 4,36 / 3 | 3,4–3,8 | nein |
+| Wohngebäude je Station (Mittel) | 38,8 | ca. 58 | – |
+| Trasse je Wohngebäude | 52,9 m | ca. 46 m | – |
+
+Referenzwerte: Netz OÖ / V-NEP 2026 (79 % Kabel, ca. 2,7 km NS-Leitung und ca. 58 Kundenanlagen je Station),
+Bletterie et al. 2016 und Kadam 2018 (3,4 bzw. 3,75 Abgänge je Station), siehe
+`docs/research/2026-10-25-ns-leitungen-steyr.md`. Die Werte je Station sind nur Orientierung (Controller): Mit
+465 Stationen werden die Netze kleiner (weniger Gebäude und Trasse je Station); je Gebäude liegt die Trasse mit
+52,9 m nahe am Netz-OÖ-Mittel von 46 m, das ländlicher geprägt ist als die Region Steyr. Mehr Abgänge als das
+Ziel kommen aus der Regel „höchstens 30 Gebäude je Abgang“ und den eigenen Abgängen für Anlagen über 30 kWp.
+
+Typverteilung (km, parallele Systeme einzeln; Anteil am Strang bzw. an den Hausanschlüssen):
+
+| Typ | km | Anteil |
+|---|---|---|
+| NAYY 4x50 | 663,2 | 46,0 % |
+| Al 4x95 | 210,1 | 14,6 % |
+| NAYY 4x240 | 200,5 | 13,9 % |
+| Al 4x70 | 190,7 | 13,2 % |
+| NAYY 4x150 | 175,7 | 12,2 % |
+| NAYY 4x35 (Hausanschluss) | 263,9 | 87,3 % |
+| Al 4x25 (Hausanschluss) | 38,4 | 12,7 % |
+
+Für die Typverteilung gibt es keinen Referenzwert in der Recherche; auffällig ist der hohe Anteil des kleinsten
+Kabels (46 %), der zur verfehlten Abnahmegrenze passt.
+
+Markierte Abgänge („bräuchte eigene Station“, Entscheidung 7): 59 Abgänge an **29 von 465 Stationen (6,2 %)**,
+Grenze 10 % eingehalten; davon 29 zu lang (ab 6 Wohngebäuden jenseits der Grenze), 32 mit scheiternder Bemessung
+(auch 2 × 4x240 reicht nicht). Ausläufer (nicht markiert, Controller-Regel): 398 Abgänge an 203 Stationen,
+Reichweite Median 789 m, P90 1 495 m. Gebietstypen: stadt 142, ort 227, streu 96 Stationen.
+
+Zusatzstationen (Owner-Entscheidung 1): 245 geplant, 36 kleine wieder aufgelöst, 209 behalten (465 statt 257);
+der Anteil der Stationen mit markiertem Abgang sank von 57,6 % über 13,5 % (Durchgang 1) auf 6,2 % (Durchgang 2).
+
+## Abnahmegrenze „heute“ (Entscheidung 6)
+
+Szenario heute, PV 1,0, Speicher base, ungesteuert, Grenzmodus `trafo`, ohne Netzspeicher; je Station und
+Wetterjahr das P90 über 20 Seeds der höchsten Abschnittsauslastung (beide Richtungen, mit Spitzenzuschlag),
+zusammengefasst als Maximum über die drei Jahre.
+
+| Wetterjahr | Seeds | Stationen > 100 % | Stationen > 120 % | Median P90 | Max P90 |
+|---|---|---|---|---|---|
+| 2012 | 20 | 105 | 61 | 68,8 % | 202,8 % |
+| 2017 | 20 | 81 | 46 | 63,4 % | 188,2 % |
+| 2023 | 20 | 72 | 33 | 59,7 % | 179,6 % |
+| alle (Maximum je Station) | 20 | **105** | **63** | 69,0 % | 202,8 % |
+
+**Ergebnis: nicht bestanden** (Regel: ≤ 5 von 257 über 100 %, keine über 120 %; anteilig ≤ 9 von 465).
+Zum Vergleich die Variante ohne Zusatzstationen (`prepared`, 257 Stationen): 73 über 100 %, 41 über 120 % —
+ebenfalls nicht bestanden. Die Trafo-Seite ist dagegen heute fast frei (Median 0–2 Stationen mit Engpass).
+
+### Diagnose
+
+Für jede der 105 Stationen (Wetter 2012) der Seed mit dem Wert am nächsten am P90 und darin der Abschnitt mit
+der höchsten Auslastung (`gridsim/feeders/report.py::segment_table`):
+
+- Gebietstyp: stadt 71, ort 34, streu 0 (stadt: 71 von 142 Stationen = 50 %; ort 34 von 227; streu 0 von 96).
+- Abschnitt: immer **NAYY 4x50**, immer Strang (nie Hausanschluss), einfach geführt, 102 von 105 nicht im
+  Ausläufer, keiner in einem markierten Abgang; Richtung immer Bezug; hinter dem Abschnitt 8–30 Gebäude (Median 23), Länge 6–123 m (Median 22 m).
+- Alle überlasteten Abschnitte dieser Stationen: NAYY 4x50 347, NAYY 4x150 7, NAYY 4x240 1; zusammen 8,5 km.
+- Zeitpunkt: 18–19 Uhr (89 von 105), fast immer Dezember bis Februar; im Median 27 Überlaststunden je Jahr am schlimmsten
+  Abschnitt.
+
+Zerlegung des schlimmsten Abschnitts in seiner Spitzenstunde (Median über die 105 Stationen):
+
+| Anteil | Bewertung (gridsim) | Auslegung (Regel) |
+|---|---|---|
+| Haushalt (66 Haushalte) | 43,7 kW | ca. 14,5 kW (66 · 2,0 kW · g(66), g = 0,11) |
+| Wärmepumpen | 47,8 kW (5 Knoten mit WP) | zusammen ca. 41 kW (Erwartungswert, 15 % je Knoten, kälteste Stunde 2012) |
+| E-Autos | 30,8 kW (5 Knoten mit Auto) | (8 % je Haushalt, n · p_ev(n)) |
+| Summe | **121,2 kW** | **55,7 kW** |
+| Grenze NAYY 4x50 (144 A, cos φ 0,97) | 96,8 kW | 96,8 kW |
+
+Die Auslegung liegt in keinem Fall über der Grenze (Regel richtig umgesetzt), die Bewertung in 103 von 105 Fällen
+darüber. Die Regel selbst passt nicht zur Bewertung:
+
+1. **Haushalt:** n · P_HH · g(n) mit P_HH = 2,0 kW und g∞ = 0,07 ergibt für große Kollektive 0,14 kW je Haushalt.
+   Das H0-Profil in gridsim hat eine Spitze von 0,79 kW je Haushalt (3 000 kWh). Der Spitzenzuschlag nach
+   Entscheidung 8 greift nur, wenn g(n) · 2,0 kW über 0,79 kW liegt, also nur bis n ≈ 2. Die Aussage „Bemessung und
+   Bewertung verwenden dieselbe Spitze“ gilt damit nur für sehr kleine Abschnitte.
+2. **Wärmepumpen und E-Autos:** Der Erwartungswert verteilt rund 0,15 WP und 0,08 Autos je Haushalt gleichmäßig; ein
+   Seed setzt ganze Geräte (ca. 10 kW WP-Leistung an einem kalten Abend, 11 kW Laden) an einzelne Knoten. Für
+   einen Abschnitt mit 20 Knoten erwartet die Regel 3 Wärmepumpen, ein Seed hat oft 5 und mehr.
+3. **Keine Reserve:** Der kleinste passende Typ wird bis 100 % Grenzstrom gewählt; 4x50 ist schon bei 79,7 kW
+   Auslegung (82 %) genommen (Station 63).
+
+Mögliche Regeländerungen (Entscheidung beim Controller, nicht umgesetzt): Haushaltslast je Abschnitt mindestens
+n · H0-Spitze (oder P_HH so wählen, dass g∞ · P_HH zur H0-Spitze passt); Wärmepumpen und E-Autos mit einem
+Quantil der Binomialverteilung je Abschnitt statt mit dem Erwartungswert; oder ein Mindestquerschnitt im Strang
+(etwa NAYY 4x150; dafür fehlt noch eine Quelle). Mit dem Median oben bräuchte es beide
+der ersten zwei Änderungen: H0-Spitze allein hebt die Auslegung auf ca. 93 kW, immer noch unter 121 kW.
+
+## Trafo-Kennzahlen: `prepared` gegen `prepared-ns`
+
+Ungesteuert, PV 1,0, Speicher base, Grenzmodus `trafo`, 20 Seeds, Median (Band 10–90 % siehe
+`out/trafo-cmp.json` auf hetzner). Die Zusatzstationen haben eigene Trafos nach `trafo_kva`; die Stationsliste
+der bisherigen Variante bleibt unverändert erhalten (Entscheidung 1).
+
+| Wetter | Szenario | Stationen | Trafo-Engpass Bezug | E_netto MWh | Speicher-Einheiten | Trafo +1 | Trafo +2 und mehr | über 1000 kVA | Engpass Einspeisung |
+|---|---|---|---|---|---|---|---|---|---|
+| 2012 | heute | 257 / 465 | 3,5 / 2 | 0,22 / 0,06 | 68 / 17 | 1 / 2 | 0 / 0 | 2 / 0 | 1 / 2 |
+| 2017 | heute | 257 / 465 | 1,5 / 1 | 0,10 / 0,00 | 33 / 1 | 0 / 1 | 0 / 0 | 1 / 0 | 2 / 2 |
+| 2023 | heute | 257 / 465 | 1 / 0 | 0,07 / 0,00 | 22 / 0 | 0 / 0 | 0 / 0 | 1 / 0 | 3 / 4 |
+| 2012 | 2030 | 257 / 465 | 100 / 124 | 64,5 / 33,5 | 19 815 / 10 329 | 66,5 / 105 | 10,5 / 16 | 23 / 5 | 1 / 2 |
+| 2023 | 2030 | 257 / 465 | 44 / 48,5 | 8,9 / 3,0 | 2 765 / 939 | 27 / 45 | 2 / 3 | 15 / 1 | 3 / 4 |
+| 2012 | 2040 | 257 / 465 | 208 / 334 | 3 737 / 2 247 | 1 145 013 / 688 615 | 37 / 102 | 107 / 198 | 64 / 36 | 1 / 1 |
+| 2023 | 2040 | 257 / 465 | 193 / 296,5 | 354 / 196 | 108 609 / 60 312 | 74 / 157,5 | 70 / 118 | 49 / 21 | 2 / 3 |
+
+Lesart: Mehr, aber kleinere Trafos. Die Zahl der Stationen mit Trafo-Engpass steigt mit der Stationszahl (2040
+absolut von 193–208 auf 297–334 gestiegen, als Anteil von 75–81 % auf 64–72 % gesunken); die Energie über der Grenze und die
+Stationen über 1000 kVA sinken deutlich, weil große Stationen entlastet wurden. Für Aussagen „Anteil der Trafos
+mit Engpass“ ist die Stationszahl mitzunennen.
+
+## Vergleich der Modi 2030 und 2040
+
+`prepared-ns`, PV 1,0, Speicher base, 20 Seeds je Einstellung, Median über die Seeds. Spalten: Trafo-Engpass =
+Stationen mit Trafo über `kva` (Bezug); Leitung Bezug / Einsp. = Stationen mit mindestens einem Abschnitt über
+100 %; nur Leitung = Stationen, an denen in einer Richtung nur die Leitung überlastet ist; Überlast km = Länge der
+überlasteten Abschnitte; ungeladen = E-Auto-Energie, die bis 7 Uhr nicht geladen werden konnte; NS = Netzspeicher
+(Anzahl, Summe der Kapazität); letzte Spalte = „Engpass zuerst“ in Bezugsrichtung je Station als häufigste
+Klasse über die Seeds (Stationen, Summe 465).
+
+### Kernaussagen
+
+| Wetter | Szenario | Stationen Trafo / Leitung / beide / keiner (ungesteuert) | Leitung Bezug: gesteuert `trafo` → `trafo+leitung` | dabei ungeladen MWh | Leitung Bezug: V2G `trafo` → `trafo+leitung` | dabei ungeladen MWh | Netzspeicher (ungesteuert): Leitung Bezug aus → an, Anzahl, MWh |
+|---|---|---|---|---|---|---|---|
+| 2012 | 2030 | 32 / 114 / 91 / 228 | 188 → 105 | 8 → 98 | 188 → 51 | 23 → 257 | 200 → 182, 369, 935 |
+| 2023 | 2030 | 18 / 139 / 18 / 290 | 154 → 60 | 0 → 10 | 154 → 14 | 0 → 36 | 157 → 141, 275, 114 |
+| 2012 | 2040 | 52 / 19 / 285 / 109 | 275 → 228 | 1 037 → 2 181 | 273 → 184 | 2 090 → 4 392 | 303 → 286, 698, 11 012 |
+| 2023 | 2040 | 45 / 23 / 253 / 144 | 252 → 171 | 52 → 729 | 250 → 70 | 112 → 1 333 | 278 → 258, 612, 1 399 |
+
+- **Trafo oder Leitung (ungesteuert):** 2030 ist an mehr Stationen nur die Leitung überlastet als nur der Trafo
+  (2012: 114 gegen 32, 2023: 139 gegen 18); 2040 sind an den meisten Stationen beide überlastet (253–285 von 465).
+  Weil schon „heute“ 42–58 Stationen „Leitung zuerst“ zeigen (Abnahmegrenze verfehlt), ist der Leitungsanteil
+  überzeichnet.
+- **Leitungsbewusste Steuerung** (`trafo+leitung`) senkt die Zahl der Stationen mit Leitungsüberlast deutlich
+  (gesteuertes Laden 2030: um 44–61 %, 2040: um 17–32 %; V2G stärker, weil die Rückspeisung Abschnitte entlastet).
+  Der Preis ist ungeladene E-Auto-Energie: Was der Abschnitt nicht trägt, wird nicht geladen (2040, 2012: 2,2 GWh
+  statt 1,0 GWh). Die verbleibende Leitungsüberlast kommt aus dem Grundfluss (Haushalt, Wärmepumpe), den die
+  Steuerung nicht verschiebt. Die Trafo-Kennzahlen sind in beiden Modi gleich (34/34, 230/230, 132/132 Stationen) —
+  nach dem Fix unten.
+- **V2G gegen Trafo:** Im Modus `trafo` senkt V2G die Stationen mit Trafo-Engpass stark (2040, 2023: 132 → 18
+  gegenüber gesteuertem Laden), ändert an den Leitungen aber fast nichts; erst `trafo+leitung` bringt die
+  Rückspeisung an die Abschnitte, die sie brauchen.
+- **Netzspeicher** wirken wenig und werden sehr groß: ungesteuert 2030 (2012) 8–10 % weniger Stationen mit
+  Leitungsüberlast bei 369 Speichern mit zusammen 935 MWh; 2040 (2012) 698 Speicher mit 11 GWh. Die Bemessung nach
+  § 7.2 fasst die langen Winterabend-Ereignisse einer Kältewelle zusammen und ergibt Energien, die kein
+  Netzbetreiber an einen NS-Abgang stellen würde. Mit gesteuertem Laden im Leitungsmodus erhöhen sie die
+  ungeladene Energie (2012/2030: 98 → 158 MWh), weil ihr Nachladen in der Nacht Leitungsraum belegt (Ruling: der
+  Netzspeicher sieht dort nur den Grundfluss). Als Mittel gegen die Leitungsengpässe dieses Netzes taugen sie
+  nach diesen Zahlen nicht; gegen kurze Spitzen (2023) ist die Größe kleiner (114 MWh in 2030), die Wirkung aber
+  ebenso gering.
+- **Einspeisung:** Bei PV 1,0 gibt es praktisch keine Leitungsüberlast in Einspeiserichtung (0–5 Stationen).
+
+### Reihenfolge heute → 2030 → 2040
+
+Je Station das erste Szenario mit Engpass (ungesteuert, Grenzmodus `trafo`, beide Richtungen, häufigste Klasse
+über die Seeds) und welches Element dort überlastet ist (Entscheidung 9):
+
+| Wetter | zuerst Trafo | zuerst Leitung | beide zugleich | nie bis 2040 | davon schon heute (T / L / b) |
+|---|---|---|---|---|---|
+| 2012 | 80 | 139 | 139 | 107 | 2/58/0 |
+| 2023 | 62 | 147 | 115 | 141 | 4/42/0 |
+
+„beide zugleich“ heißt: Im ersten Szenario mit Engpass sind Trafo und Leitung überlastet. Ohne die verfehlte
+Abnahmegrenze würden die 42–58 Stationen mit „Leitung schon heute“ später kippen; die Reihenfolge ist daher nur
+als Tendenz zu lesen: Leitungen kippen bei diesem Netz meist vor oder mit dem Trafo.
+
+### Alle Einstellungen
+
+| Wetter | Szenario | Laden | Grenzen | Netzspeicher | Seeds | Trafo-Engpass | Leitung Bezug | Leitung Einsp. | nur Leitung | Überlast km | ungeladen MWh | NS Anzahl | NS kWh | Bezug: Trafo / Leitung / beide / keiner |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2012 | heute | uncontrolled | trafo | aus | 20 | 2 | 62 | 0 | 62 | 5,2 | 0,0 | – | – | 0 / 58 / 0 / 407 |
+| 2012 | 2030 | uncontrolled | trafo | aus | 20 | 124 | 200 | 0 | 114 | 34,6 | 0,0 | – | – | 32 / 114 / 91 / 228 |
+| 2012 | 2030 | uncontrolled | trafo | an | 20 | 108 | 182 | 0 | 118 | 28,2 | 0,0 | 369 | 934923 | 36 / 124 / 62 / 243 |
+| 2012 | 2030 | controlled | trafo | aus | 20 | 34 | 188 | 0 | 170 | 31,6 | 8,3 | – | – | 14 / 173 / 15 / 263 |
+| 2012 | 2030 | controlled | trafo | an | 20 | 32 | 188 | 0 | 172 | 31,5 | 7,8 | 346 | 934730 | 14 / 180 / 7 / 264 |
+| 2012 | 2030 | controlled | trafo+leitung | aus | 20 | 34 | 105 | 0 | 88 | 9,4 | 98,1 | – | – | 15 / 85 / 10 / 355 |
+| 2012 | 2030 | controlled | trafo+leitung | an | 20 | 32 | 92 | 0 | 77 | 7,7 | 158,0 | 152 | 671396 | 15 / 76 / 7 / 367 |
+| 2012 | 2030 | v2g | trafo | aus | 20 | 9 | 188 | 0 | 182 | 31,6 | 22,6 | – | – | 1 / 189 / 0 / 275 |
+| 2012 | 2030 | v2g | trafo | an | 20 | 9 | 188 | 0 | 182 | 31,4 | 21,2 | 346 | 932299 | 1 / 189 / 0 / 275 |
+| 2012 | 2030 | v2g | trafo+leitung | aus | 20 | 10 | 51 | 0 | 46 | 4,7 | 257,1 | – | – | 1 / 42 / 1 / 421 |
+| 2012 | 2030 | v2g | trafo+leitung | an | 20 | 10 | 48 | 0 | 43 | 4,4 | 278,3 | 59 | 321159 | 1 / 40 / 1 / 423 |
+| 2012 | 2040 | uncontrolled | trafo | aus | 20 | 334 | 303 | 0 | 23 | 121,8 | 0,0 | – | – | 52 / 19 / 285 / 109 |
+| 2012 | 2040 | uncontrolled | trafo | an | 20 | 318 | 286 | 0 | 32 | 107,3 | 0,0 | 698 | 11011942 | 60 / 25 / 264 / 116 |
+| 2012 | 2040 | controlled | trafo | aus | 20 | 230 | 275 | 0 | 88 | 75,7 | 1037,2 | – | – | 42 / 83 / 196 / 144 |
+| 2012 | 2040 | controlled | trafo | an | 20 | 201 | 270 | 0 | 118 | 77,1 | 793,4 | 587 | 9984805 | 48 / 115 / 158 / 144 |
+| 2012 | 2040 | controlled | trafo+leitung | aus | 20 | 230 | 228 | 0 | 52 | 44,0 | 2180,9 | – | – | 55 / 50 / 183 / 177 |
+| 2012 | 2040 | controlled | trafo+leitung | an | 20 | 206 | 202 | 0 | 61 | 36,0 | 3204,2 | 442 | 7795200 | 66 / 58 / 146 / 195 |
+| 2012 | 2040 | v2g | trafo | aus | 20 | 130 | 273 | 0 | 164 | 74,7 | 2090,1 | – | – | 15 / 157 / 117 / 176 |
+| 2012 | 2040 | v2g | trafo | an | 20 | 104 | 270 | 5 | 192 | 76,4 | 1547,5 | 584 | 8857952 | 19 / 182 / 89 / 175 |
+| 2012 | 2040 | v2g | trafo+leitung | aus | 20 | 144 | 184 | 0 | 65 | 35,3 | 4392,2 | – | – | 18 / 59 / 130 / 258 |
+| 2012 | 2040 | v2g | trafo+leitung | an | 20 | 136 | 173 | 0 | 66 | 32,3 | 4681,3 | 340 | 3068256 | 25 / 59 / 116 / 265 |
+| 2017 | heute | uncontrolled | trafo | aus | 20 | 1 | 54 | 0 | 54 | 4,4 | 0,0 | – | – | 0 / 53 / 0 / 412 |
+| 2023 | heute | uncontrolled | trafo | aus | 20 | 0 | 44 | 0 | 44 | 3,7 | 0,0 | – | – | 0 / 42 / 0 / 423 |
+| 2023 | 2030 | uncontrolled | trafo | aus | 20 | 48 | 157 | 0 | 131 | 22,1 | 0,0 | – | – | 18 / 139 / 18 / 290 |
+| 2023 | 2030 | uncontrolled | trafo | an | 20 | 44 | 141 | 0 | 122 | 17,6 | 0,0 | 275 | 113754 | 19 / 129 / 12 / 305 |
+| 2023 | 2030 | controlled | trafo | aus | 20 | 6 | 154 | 0 | 151 | 21,4 | 0,0 | – | – | 0 / 155 / 0 / 310 |
+| 2023 | 2030 | controlled | trafo | an | 20 | 6 | 154 | 0 | 152 | 21,2 | 0,0 | 269 | 112347 | 0 / 155 / 0 / 310 |
+| 2023 | 2030 | controlled | trafo+leitung | aus | 20 | 6 | 60 | 0 | 58 | 3,9 | 10,2 | – | – | 0 / 54 / 0 / 411 |
+| 2023 | 2030 | controlled | trafo+leitung | an | 20 | 6 | 52 | 0 | 51 | 3,1 | 23,5 | 74 | 48275 | 0 / 43 / 0 / 422 |
+| 2023 | 2030 | v2g | trafo | aus | 20 | 0 | 154 | 0 | 154 | 21,4 | 0,3 | – | – | 0 / 155 / 0 / 310 |
+| 2023 | 2030 | v2g | trafo | an | 20 | 0 | 154 | 0 | 154 | 21,2 | 0,3 | 269 | 112339 | 0 / 155 / 0 / 310 |
+| 2023 | 2030 | v2g | trafo+leitung | aus | 20 | 1 | 14 | 0 | 14 | 0,9 | 35,5 | – | – | 0 / 10 / 0 / 455 |
+| 2023 | 2030 | v2g | trafo+leitung | an | 20 | 1 | 14 | 0 | 14 | 0,9 | 40,5 | 15 | 16263 | 0 / 10 / 0 / 455 |
+| 2023 | 2040 | uncontrolled | trafo | aus | 20 | 296 | 278 | 0 | 30 | 88,6 | 0,0 | – | – | 45 / 23 / 253 / 144 |
+| 2023 | 2040 | uncontrolled | trafo | an | 20 | 262 | 258 | 0 | 56 | 75,0 | 0,0 | 612 | 1399303 | 57 / 54 / 206 / 148 |
+| 2023 | 2040 | controlled | trafo | aus | 20 | 132 | 252 | 0 | 147 | 65,3 | 52,0 | – | – | 26 / 140 / 114 / 185 |
+| 2023 | 2040 | controlled | trafo | an | 20 | 102 | 251 | 0 | 178 | 66,0 | 47,1 | 547 | 1312416 | 28 / 175 / 77 / 185 |
+| 2023 | 2040 | controlled | trafo+leitung | aus | 20 | 132 | 171 | 0 | 81 | 21,5 | 729,1 | – | – | 41 / 78 / 99 / 247 |
+| 2023 | 2040 | controlled | trafo+leitung | an | 20 | 109 | 147 | 0 | 88 | 17,0 | 1128,6 | 302 | 719771 | 49 / 90 / 65 / 261 |
+| 2023 | 2040 | v2g | trafo | aus | 20 | 18 | 250 | 0 | 238 | 64,6 | 111,6 | – | – | 5 / 239 / 12 / 209 |
+| 2023 | 2040 | v2g | trafo | an | 20 | 16 | 250 | 0 | 240 | 65,6 | 91,7 | 541 | 1264616 | 6 / 241 / 8 / 210 |
+| 2023 | 2040 | v2g | trafo+leitung | aus | 20 | 22 | 70 | 0 | 57 | 8,1 | 1333,2 | – | – | 5 / 54 / 15 / 391 |
+| 2023 | 2040 | v2g | trafo+leitung | an | 20 | 20 | 66 | 0 | 54 | 7,0 | 1414,4 | 94 | 220465 | 7 / 54 / 10 / 394 |
+
+Wandzeiten der Matrix (je Wetterjahr parallel, 4 Worker): 20 Seeds ungesteuert 222–254 s, mit Netzspeicher
+130–183 s (für die zweiten 10 Seeds; Plan einmal 57–140 s); gesteuert/V2G `trafo` 100–175 s je 10 Seeds,
+`trafo+leitung` 186–485 s je 10 Seeds. Gesamte Matrix etwa 2,5 Stunden.
+
+## Stichprobe: drei Stationen je Gebietstyp
+
+Auswahl je Gebietstyp nach dem P90 der Abnahmegrenze: höchster Wert, Median, unteres Viertel. Abschnittstabelle
+aus `tools/pp_compare.py export` (heute, 2012, Seed 0), Kartenskizzen in `docs/abnahme-screens/stichprobe-*.svg`
+(Abschnitte nach höchster Auslastung des Seeds: grün < 80 %, orange 80–100 %, rot > 100 %; gestrichelt =
+Freileitung; schwarzes Quadrat = Station).
+
+| Station | Gebiet | Gebäude | Abgänge | Abschnitte | Ausläufer | P90 Abnahme | km je Typ (Systeme) |
+|---|---|---|---|---|---|---|---|
+| 63 | stadt | 40 | 4 | 82 | 1 | 202,8 % | NAYY 4x50 1,96, NAYY 4x35 0,53, NAYY 4x150 0,27 |
+| 109 | stadt | 94 | 7 | 177 | 2 | 100,2 % | NAYY 4x50 3,39, NAYY 4x35 1,73, NAYY 4x150 0,62 |
+| 259 | stadt | 35 | 3 | 62 | 0 | 77,1 % | NAYY 4x50 0,79, NAYY 4x35 0,46 |
+| 261 | ort | 47 | 3 | 94 | 0 | 185,0 % | NAYY 4x50 1,38, NAYY 4x35 0,69, NAYY 4x240 0,37, NAYY 4x150 0,08 |
+| 352 | ort | 22 | 3 | 41 | 0 | 68,4 % | NAYY 4x50 0,62, NAYY 4x35 0,35, Al 4x70 0,15, Al 4x25 0,11 |
+| 441 | ort | 8 | 3 | 15 | 0 | 48,0 % | NAYY 4x50 0,25, NAYY 4x35 0,16 |
+| 167 | streu | 41 | 4 | 98 | 1 | 79,9 % | Al 4x95 2,50, NAYY 4x50 1,23, Al 4x70 1,15, NAYY 4x240 1,05, Al 4x25 0,34, NAYY 4x35 0,31, NAYY 4x150 0,17 |
+| 117 | streu | 20 | 3 | 44 | 0 | 39,3 % | Al 4x70 2,37, Al 4x95 0,54, NAYY 4x150 0,43, NAYY 4x50 0,31, Al 4x25 0,26, NAYY 4x35 0,02 |
+| 433 | streu | 9 | 3 | 20 | 1 | 30,1 % | Al 4x95 1,09, NAYY 4x50 0,89, NAYY 4x150 0,21, NAYY 4x35 0,13, Al 4x25 0,03, Al 4x70 0,03 |
+
+Je Station die drei am stärksten ausgelasteten Abschnitte (Auslegung = Auslegungsbezug nach Regel, Grenze =
+Grenzstrom bei cos φ 0,97; HA = Hausanschluss):
+
+| Station | Abschnitt | Typ | Länge m | Knoten dahinter | Auslegung kW | Grenze kW | höchste Auslastung | Stunden > 100 % |
+|---|---|---|---|---|---|---|---|---|
+| 63 | 3 | NAYY 4x50 | 15,9 | 18 | 79,7 | 96,8 | 133,6 % | 70 |
+| 63 | 13 | NAYY 4x50 | 37,2 | 11 | 54,6 | 96,8 | 75,7 % | 0 |
+| 63 | 18 | NAYY 4x50 | 23,3 | 10 | 51,4 | 96,8 | 71,7 % | 0 |
+| 109 | 3 | NAYY 4x50 | 17,0 | 25 | 45,5 | 96,8 | 91,1 % | 0 |
+| 109 | 8 | NAYY 4x50 | 2,7 | 24 | 43,9 | 96,8 | 88,3 % | 0 |
+| 109 | 9 | NAYY 4x50 | 8,1 | 29 | 48,8 | 96,8 | 82,1 % | 0 |
+| 259 | 2 | NAYY 4x50 | 57,4 | 12 | 32,7 | 96,8 | 72,5 % | 0 |
+| 259 | 1 | NAYY 4x50 | 16,1 | 22 | 51,8 | 96,8 | 66,9 % | 0 |
+| 259 | 5 | NAYY 4x50 | 23,6 | 11 | 31,4 | 96,8 | 62,1 % | 0 |
+| 261 | 16 | NAYY 4x50 | 34,2 | 13 | 75,1 | 96,8 | 151,7 % | 156 |
+| 261 | 23 | NAYY 4x50 | 30,1 | 7 | 47,9 | 96,8 | 119,6 % | 61 |
+| 261 | 3 | NAYY 4x50 | 1,0 | 17 | 70,9 | 96,8 | 100,4 % | 1 |
+| 352 | 2 | NAYY 4x50 | 24,2 | 14 | 35,5 | 96,8 | 54,1 % | 0 |
+| 352 | 5 | NAYY 4x50 | 24,2 | 13 | 34,2 | 96,8 | 53,4 % | 0 |
+| 352 | 8 | NAYY 4x50 | 49,2 | 6 | 26,0 | 96,8 | 37,6 % | 0 |
+| 441 | 7 | NAYY 4x35 (HA) | 21,7 | 1 | 9,5 | 82,7 | 51,5 % | 0 |
+| 441 | 1 | NAYY 4x50 | 45,5 | 3 | 13,7 | 96,8 | 47,2 % | 0 |
+| 441 | 3 | NAYY 4x50 | 29,3 | 2 | 11,5 | 96,8 | 47,1 % | 0 |
+| 167 | 6 | NAYY 4x50 | 18,7 | 17 | 42,3 | 96,8 | 62,2 % | 0 |
+| 167 | 23 | NAYY 4x50 | 13,7 | 7 | 29,4 | 96,8 | 42,4 % | 0 |
+| 167 | 28 | NAYY 4x50 | 42,2 | 6 | 28,0 | 96,8 | 41,8 % | 0 |
+| 117 | 0 | Al 4x70 | 45,9 | 17 | 41,0 | 171,4 | 25,8 % | 0 |
+| 117 | 24 | NAYY 4x150 | 429,6 | 1 | 0,0 | 184,8 | 23,9 % | 0 |
+| 117 | 25 | Al 4x25 (HA) | 35,2 | 1 | 10,6 | 90,7 | 22,2 % | 0 |
+| 433 | 2 | NAYY 4x50 | 41,8 | 3 | 19,7 | 96,8 | 20,2 % | 0 |
+| 433 | 15 | NAYY 4x35 (HA) | 17,6 | 1 | 9,8 | 82,7 | 18,0 % | 0 |
+| 433 | 4 | NAYY 4x50 | 410,3 | 2 | 12,0 | 96,8 | 16,2 % | 0 |
+
+Von Hand geprüft:
+
+- Topologie und Typen passen zum Gebietstyp: stadt nur Kabel; ort überwiegend Kabel mit einzelnen
+  Freileitungsabgängen (352); streu mit hohem Freileitungsanteil und langen Strängen (117, 167, 433).
+- Querschnitte steigen zur Station hin (261: 4x240 am Abgangsanfang mit 27 Knoten, 4x150 dahinter, 4x50 am Ende);
+  das Bemessungsverfahren arbeitet wie beschrieben.
+- Station 117, Abschnitt 24: 430 m NAYY 4x150 zu einem einzelnen Knoten ohne Bezugslast — ein eigener Abgang für
+  eine PV-Anlage über 30 kWp, nach Einspeisung und 3 % Spannungsanhebung bemessen. Plausibel.
+- Station 433, Abschnitte 4 und 6: 410 m und 228 m NAYY 4x50 zu ein bis zwei Gebäuden — lange Stichleitungen in
+  Streusiedlung, wie in der Recherche (0,5–1 km bei Weilern und Einzelgehöften), thermisch unkritisch.
+- Die überlasteten Abschnitte (63, 261) sind kurze 4x50-Abschnitte nahe der Abzweigung mit 13–18 Gebäuden
+  dahinter, deren Auslegung schon bei 78–82 % der Grenze lag; genau das Muster der Diagnose.
+
+## pandapower-Vergleich
+
+`tools/pp_compare.py` exportiert je Station Netz und Knotenflüsse (ohne Spitzenzuschlag, der am Abschnitt und
+nicht am Knoten hängt) der 24 Stunden mit der höchsten Abschnittsauslastung und rechnet im pandapower-Container
+(`steyr-gutachten-2026-10-25/py.sh`, pandapower 3.2.1, eigener Unterordner `gridsim-ppcompare/`) je Stunde einen
+Lastfluss: Sammelschiene ideal 1,0 pu, Trafo nicht modelliert, Lasten mit cos φ 0,97 bei Bezug und 1,0 bei
+Einspeisung, R/X der Abschnitte wie in gridsim. Verglichen wird der Strom je Abschnitt als Anteil am Grenzstrom,
+nur Abschnittsstunden ab 10 % Auslastung. Alle Lastflüsse konvergierten.
+
+| Station | heute: gridsim max | pandapower max | Abw. Mittel (Pp) | Abw. P95 (Pp) | Abw. relativ Median | U min (pu) | 2040: gridsim max | pandapower max | Abw. Mittel (Pp) | Abw. P95 (Pp) | Abw. relativ Median | U min (pu) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 63 | 133,6 % | 142,5 % | 1,8 | 4,7 | 4,6 % | 0,92 | 361,6 % | 431,4 % | 9,0 | 36,5 | 12,1 % | 0,76 |
+| 109 | 91,1 % | 96,8 % | 1,2 | 3,5 | 4,2 % | 0,93 | 203,4 % | 246,9 % | 5,9 | 19,5 | 12,4 % | 0,80 |
+| 259 | 72,5 % | 75,1 % | 1,1 | 2,2 | 3,8 % | 0,95 | 175,1 % | 190,1 % | 3,6 | 8,4 | 7,4 % | 0,88 |
+| 261 | 151,7 % | 164,6 % | 2,8 | 7,6 | 6,5 % | 0,92 | 406,0 % | 545,6 % | 12,4 | 43,6 | 17,2 % | 0,69 |
+| 352 | 54,1 % | 55,2 % | 0,5 | 1,1 | 2,1 % | 0,96 | 120,4 % | 125,8 % | 1,3 | 4,6 | 3,8 % | 0,89 |
+| 441 | 50,9 % | 51,9 % | 0,5 | 0,9 | 1,4 % | 0,98 | 60,0 % | 61,6 % | 0,6 | 1,0 | 1,7 % | 0,97 |
+| 167 | 62,2 % | 64,8 % | 1,0 | 2,0 | 4,8 % | 0,93 | 171,6 % | 194,0 % | 4,0 | 10,3 | 12,0 % | 0,78 |
+| 117 | 25,8 % | 26,8 % | 0,0 | 0,7 | −1,7 % | 0,96 | 110,8 % | 129,2 % | 3,1 | 8,4 | 12,5 % | 0,82 |
+| 433 | 20,2 % | 21,3 % | 0,9 | 1,1 | 5,9 % | 0,94 | 60,8 % | 68,3 % | 1,7 | 4,6 | 5,9 % | 0,85 |
+| **alle** | | | **1,4** | **4,4** | **4,2 %** | | | | **6,4** | **23,9** | **11,6 %** | |
+
+Abw. = pandapower − gridsim in Prozentpunkten (Pp) der Auslastung. Überlast (> 100 %) in Abschnittsstunden:
+heute gridsim 65, pandapower 71, uneinig 6 (von 4 754); 2040 gridsim 969, pandapower 1 191, uneinig 222
+(von 9 174).
+
+Lesart: Die radiale Summation ohne Verluste rechnet den Strom bei 400 V. Bei Konstantleistungslasten steigt der
+Strom, wenn die Spannung sinkt; daher liegt gridsim systematisch **unter** dem Lastfluss, um etwa den
+Kehrwert der Spannung (heute U min 0,92–0,98 pu → 2–7 %, 2040 U min 0,69–0,97 pu → bis 17 %, Spitzen bis 140 Pp
+bei Station 261). Für die thermische Frage heute ist die Abweichung klein; in 2040 sind die gridsim-Werte als
+Untergrenze zu lesen. Die Spannungen selbst sind kein Ergebnis (synthetisches Netz, ideale Sammelschiene).
+
+## Dashboard-Prüfung
+
+API aus dem Arbeitsordner auf hetzner (`127.0.0.1:17099`, `GRIDSIM_PREPARED=prepared-ns`, `GRIDSIM_CACHE=cache-ns`,
+1 Worker), dazu die Seite `site/` mit dem aktuellen `web/gridsim/` unter demselben Ursprung, SSH-Tunnel vom Mac,
+Playwright (Chromium, 1440 × 900). Geprüft: Lauf heute und 2030 (2012, ungesteuert, 20 Seeds aus dem Cache in
+8,2 s), Leitungsebene ein, Schalter „Control limits“ und „Grid storage“ umgestellt.
+
+- Screenshots: `docs/abnahme-screens/dashboard-1-start.png`, `dashboard-2-run-heute.png`,
+  `dashboard-2-run-2030.png`, `dashboard-3-lines-heute.png`, `dashboard-3-lines-2030.png`,
+  `dashboard-4-switches.png`.
+- Konsole: keine Fehler und keine Warnungen aus Seite oder MapLibre (kein Fehler durch leere Literal-Ausdrücke);
+  nur Chromium-Hinweise „GPU stall due to ReadPixels“. In einem ersten Durchgang liefen Kacheln von basemap.at
+  in eine Zeitüberschreitung (Netz, nicht Code); im zweiten Durchgang luden alle.
+- Leitungsebene lädt (465 Stationsnetze) und färbt Stationen nach „Engpass zuerst“; Kacheln für Leitung, Kennzahl
+  „Line limits before transformer“ und Leitungslänge über Grenzstrom erscheinen.
+- **Befund für Task 12:** Überschrift „all 257 transformers“ und die Einheit „of 257“ der Kachel
+  „Transformers overloaded“ sind fest im Code (`web/gridsim/dashboard.js` Z. 53, `web/gridsim/charts.js` Z. 21);
+  mit `prepared-ns` sind es 465 Stationen. Nicht geändert (Texte erst nach Abnahme).
+
+## Abweichungen und Entscheidungen
+
+Aus dem Ledger des Controllers (`progress.md`, „Ruling“) und dem Brief; für die Lesart der Zahlen wichtig:
+
+- **Heimspeicher nicht abrufbar:** Heimspeicher-Strategien (base, forecast, room) bleiben unverändert; gridsim
+  hat keine Abruflogik für Heimspeicher (Spec 4.5 setzt sie voraus). Abrufe je Abgang macht nur der Netzspeicher.
+- **V2G-Nachladen im Leitungsmodus je Knoten begrenzt** (im Trafo-Modus je Station), nur im neuen Modus.
+- **Netzspeicher sieht bei gesteuertem Laden und V2G nur den Grundfluss** (Reihenfolge Speicher vor
+  E-Auto-Steuerung); er kann daher für E-Auto-Spitzen zu klein bemessen sein.
+- **Ausläufer:** Ferne Abgangsenden mit weniger als 6 Wohngebäuden bekommen keine eigene Station, bleiben an ihrer
+  Station, werden mit dem nötigen Typ bemessen und zählen nicht zur 10-%-Grenze.
+- **Zusatzstationen:** Gruppen bis 105 Gebäude (3,5 Abgänge × 30) mit Radiusbedingung; nur Gebäude der markierten
+  Abgänge wechseln die Station; 2 Durchgänge; kleine Zusatzstationen werden aufgelöst.
+- **Kabelanteil nach Trassenlänge** (gemeinsame Gräben und Parallelsysteme einmal) als Abnahmegröße, Kabellänge
+  zusätzlich berichtet.
+- **Kalibrierung der Gebietsschwellen:** stadt 35 m, ort 85 m (Startwerte 30/80 m ergaben 68,6 % Kabel; +5 m ist
+  die kleinste Verschiebung ins Band), danach fest.
+- Weitere: Direktabgang ab mehr als 30 kWp; markierte Abgänge = zu lang ODER Bemessung scheitert; Grenzstrom
+  `i_max_a` enthält die Parallelführung; Hausanschlüsse werden nicht bemessen, aber bewertet; Stationsfarbe =
+  häufigste Engpassklasse über die Seeds (Gleichstand: schwerere).
+
+### Im Zuge der Abnahme behoben
+
+Im Grenzmodus `trafo+leitung` füllten gesteuertes Laden, Nachladen und V2G den Trafo-Raum exakt bis `kva`; durch
+Rundung lag der Stationsfluss bis 10⁻⁶ kW über `kva`, und die Trafo-Kennzahl zählte das als Engpass (2040, 2023,
+Seed 0: 151 statt 129 Stationen bei gesteuertem Laden, 82 statt etwa 20 bei V2G). Echte Überlast war gleich. Fix:
+Abstand 1 µW am Trafo (`control_lines._TRAFO_EPS_KW`), Test `test_trafo_never_above_kva_by_rounding`, Commit
+`66ca7b7`. Der Modus `trafo` ist nicht betroffen (bitgleich). Alle Läufe mit `trafo+leitung` in diesem Bericht
+sind mit dem Fix gerechnet.
+
+## Grenzen der Aussage
+
+- **Synthetisches Netz:** Lage, Länge und Querschnitt der NS-Leitungen sind aus Straßen, Gebäuden und einer
+  Planungsregel abgeleitet, nicht aus Netzdaten des Betreibers. Einzelne Stationen können stark abweichen; belastbar
+  sind nur Größenordnung und Richtung über die Region. Die Abnahmegrenze ist verfehlt: Das synthetische Netz ist
+  heute schon schwächer als ein real betriebenes, die Leitungszahlen für 2030/2040 sind deshalb zu hoch.
+- **Kein Spannungsurteil:** Bewertet wird nur thermisch (Strom gegen Grenzstrom). Spannungsfall und -anhebung
+  sind in keiner Kennzahl; der pandapower-Vergleich zeigt in 2040 Spannungen bis 0,69 pu, die im realen Netz
+  längst zu Maßnahmen geführt hätten. Wo die Spannung zuerst begrenzt (laut Literatur häufig in ländlichen
+  Netzen), unterschätzt die thermische Sicht den Bedarf.
+- **Radiale Summation:** ohne Verluste und bei 400 V; gegenüber dem Lastfluss 4 % (heute) bis 12 % (2040) zu
+  niedrig, bei tiefen Spannungen mehr.
+- **Trafo-Bemessung:** Trafos der Zusatzstationen und der bisherigen Stationen kommen aus `trafo_kva`
+  (2–3 kVA je Wohnung, auf Normgrößen gerundet), nicht aus Betreiberdaten. Die Trafo-Kennzahlen hängen direkt
+  daran; ein Trafo eine Stufe größer verschiebt „Trafo zuerst“ zu „Leitung zuerst“.
+- **Zufall und Seeds:** Wärmepumpen und E-Autos sind je Seed zufällig verteilt; alle Einstellungen haben
+  20 Seeds, berichtet ist der Median. Bänder siehe `region.csv` je Einstellung im Cache.
+- **Netzspeicher:** Ort und Größe aus einem Auslegungslauf (Seed 0) je Einstellung, mit perfekter Tagesprognose;
+  Kostensätze für Leitungen sind Platzhalter.
