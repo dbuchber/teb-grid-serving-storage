@@ -32,7 +32,6 @@ def test_acceptance_passes_with_five_over_100():
     ok = ten([101, 102, 103, 104, 105] + [50] * 252)
     acc = report.acceptance({2012: ok, 2017: ok, 2023: ok})
     assert acc['passed'] and acc['combined']['over_100'] == 5 and acc['combined']['over_120'] == 0
-    assert acc['max_over_scaled'] == 5
 
 
 def test_acceptance_fails_on_sixth_station_or_one_over_120():
@@ -61,9 +60,22 @@ def test_acceptance_missing_year_fails_and_none_stations_ignored():
     assert acc['combined']['over_100'] == 0
 
 
-def test_acceptance_scaled_limit_for_more_stations():
-    acc = report.acceptance({y: ten([101] * 9 + [50] * 456) for y in report.ACCEPT_YEARS})
-    assert acc['max_over_scaled'] == 9 and acc['passed_scaled'] and not acc['passed']
+def test_acceptance_limit_is_five_of_all_stations():
+    """Fix-Runde 1: höchstens 5 Stationen über 100 %, gleich wie viele Stationen es gibt (5 von 465)."""
+    acc = report.acceptance({y: ten([101] * 6 + [50] * 459) for y in report.ACCEPT_YEARS})
+    assert not acc['passed'] and acc['n_stations'] == 465 and 'max_over_scaled' not in acc
+
+
+def test_render_states_five_of_n():
+    acc = report.acceptance({y: ten([101] * 5 + [50] * 460) for y in report.ACCEPT_YEARS})
+    rep = {'n_stations': 465, 'cable_share': {'by_route_length': 0.75, 'by_cable_length': 0.72, 'target': 0.79,
+                                             'band': [0.74, 0.84]},
+           'trunk_km_per_station': {'route_length': 2.0, 'cable_length': 3.0, 'target': 2.7},
+           'feeders_per_station': {'mean': 4.4, 'median': 3, 'target': [3.4, 3.8]}, 'km_per_type': {},
+           'marked': {'feeders_any': 0, 'stations_any': 0, 'stations_any_share': 0.0, 'feeders_long': 0,
+                      'feeders_sizing': 0}, 'tails': {'feeders': 0, 'stations': 0}}
+    md = report.render(rep, {}, acc, [], {})
+    assert 'höchstens 5 von 465 Stationen über 100 %' in md and '**bestanden**' in md and '257' not in md
 
 
 def test_station_class_majority_and_tie_goes_to_heavier():

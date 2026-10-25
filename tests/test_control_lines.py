@@ -10,7 +10,7 @@ from gridsim import control
 from gridsim.control_lines import controlled_lines, limit_kw, room, signal_lines, v2g_lines
 from gridsim.data import load_prepared
 from gridsim.feeders.loading import loading_pct, segment_flow
-from gridsim.feeders.sizing import SizedGrid, design_flows, size
+from gridsim.feeders.sizing import DesignRule, SizedGrid, design_flows, size
 from gridsim.feeders.topology import StationGrid, build_station_grid
 from gridsim.nodeflow import NodeBlock, base_block
 from gridsim.run import RunParams, flows
@@ -141,7 +141,7 @@ def fake_feeder(p, s, scale=1.0):
     hh = np.asarray(p.nodes_hh)[nodes]
     kwp = np.asarray(p.nodes_kwp_bins, dtype=float)[nodes].sum(axis=1)
     grid = build_station_grid(s, (0.0, 0.0), nodes, xy, hh, kwp, None)
-    load, feed = design_flows(grid, hh, np.ones(len(nodes)), 0.5 * hh, kwp)
+    load, feed = design_flows(grid, hh, np.ones(len(nodes)), kwp, DesignRule(wp_share=1.0, ev_share=0.5, h0_peak_kw=0.0))
     sized = size(grid, load, feed)
     return grid, replace(sized, i_max_a=sized.i_max_a * scale)
 

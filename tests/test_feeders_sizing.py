@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 from scipy import sparse
 
-from gridsim.feeders.sizing import design_flows, g, p_ev, size
+from scipy.stats import binom
+
+from gridsim.feeders.sizing import DesignRule, design_flows, g, p_ev, size
 from gridsim.feeders.topology import StationGrid
 
 
@@ -42,23 +44,57 @@ def test_p_ev_anchor_points():
     assert p_ev(np.array([2.5]))[0] > 0                              # Gleitkomma erlaubt
 
 
-def test_design_flows_sums_downstream():
-    # Sammelschiene -> Trunk 0 -> {Hausanschluss 1 (Knoten 0), Hausanschluss 2 (Knoten 1)}
-    gr = make_grid([-1, 0, 0], [50, 10, 10], [False, True, True], [0, 0, 0], [1, 2])
-    hh = np.array([1, 3])
-    wp = np.array([0.5, 1.5])
-    cars = np.array([1.0, 1.0])
-    kwp = np.array([0.0, 8.0])
-    load, feed = design_flows(gr, hh, wp, cars, kwp)
-    assert load[0] == pytest.approx(2.0 * g(np.array([4]))[0] * 4 + 2.0 + 2 * p_ev(np.array([2.0]))[0])
-    assert load[1] == pytest.approx(2.0 * 1 * 1 + 0.5 + 1 * 11.0)
-    assert feed.tolist() == [8.0, 0.0, 8.0]
+NO_DEVICES = DesignRule(wp_share=0.0, ev_share=0.0, h0_peak_kw=0.0)
 
 
-def test_design_flows_fractional_car_not_above_11_kw():
+def star(n_nodes):
+    """Trunk 0 mit ``n_nodes`` Hausanschlüssen (Knoten i an Abschnitt i + 1)."""
+    return make_grid([-1] + [0] * n_nodes, [50] + [10] * n_nodes, [False] + [True] * n_nodes, [0] * (n_nodes + 1),
+                     list(range(1, n_nodes + 1)))
+
+
+def test_household_term_at_least_h0_peak():
+    """Fix-Runde 1: Haushaltslast je Abschnitt = n · max(P_HH · g(n), H0-Spitze), nie unter n · H0-Spitze."""
+    gr = star(10)
+    hh = np.full(10, 5)                                  # 50 Haushalte am Trunk, 5 je Hausanschluss
+    rule = DesignRule(wp_share=0.0, ev_share=0.0, h0_peak_kw=0.79)
+    load, _ = design_flows(gr, hh, np.zeros(10), np.zeros(10), rule)
+    assert 2.0 * g(np.array([50]))[0] < 0.79              # ohne Fix läge die Auslegung darunter
+    assert load[0] == pytest.approx(50 * 0.79)
+    assert (load >= 0.79 * np.r_[50, hh] - 1e-9).all()
+    # kleine Kollektive: P_HH · g(n) bleibt maßgebend
+    load, _ = design_flows(one_section(50), np.array([1]), np.zeros(1), np.zeros(1), rule)
+    assert load[0] == pytest.approx(2.0)
+
+
+def test_devices_binomial_p90():
+    """Fix-Runde 1: k = P90 der Binomialverteilung ganzer Geräte; WP mit voller Leistung, E-Autos k · p_ev(k)."""
+    gr = star(20)
+    hh = np.ones(20, int)
+    wp_kw = np.full(20, 10.0)
+    wp_kw[0] = 0.0                                       # Knoten 0 kann keine WP haben (z. B. Fernwärme)
+    rule = DesignRule(wp_share=0.15, ev_share=0.08, h0_peak_kw=0.0)
+    load, _ = design_flows(gr, hh, wp_kw, np.zeros(20), rule)
+    k_wp = binom.ppf(0.9, 19, 0.15)
+    k_ev = binom.ppf(0.9, 20, 0.08)
+    assert k_wp == 5 and k_ev == 3
+    hh_part = 2.0 * g(np.array([20]))[0] * 20
+    assert load[0] == pytest.approx(hh_part + k_wp * 10.0 + k_ev * p_ev(np.array([k_ev]))[0])
+    # ein Haushalt: P(keine WP) = 0,85 < 0,9 → eine ganze WP; P(kein Auto) = 0,92 ≥ 0,9 → kein Auto
+    assert load[2] == pytest.approx(2.0 + 10.0)
+
+
+def test_design_flows_without_homes_or_devices():
     gr = one_section(50)
-    load, _ = design_flows(gr, np.array([0]), np.array([0.0]), np.array([0.3]), np.array([0.0]))
-    assert load[0] == pytest.approx(0.3 * 11.0)
+    load, _ = design_flows(gr, np.array([0]), np.array([0.0]), np.array([0.0]),
+                           DesignRule(wp_share=0.15, ev_share=0.08, h0_peak_kw=0.79))
+    assert load[0] == 0.0 and np.isfinite(load).all()
+
+
+def test_design_flows_feed_sums_downstream():
+    gr = make_grid([-1, 0, 0], [50, 10, 10], [False, True, True], [0, 0, 0], [1, 2])
+    _, feed = design_flows(gr, np.array([1, 3]), np.zeros(2), np.array([0.0, 8.0]), NO_DEVICES)
+    assert feed.tolist() == [8.0, 0.0, 8.0]
 
 
 def test_size_picks_smallest_thermal():
@@ -139,7 +175,7 @@ def test_size_service_fixed_and_zero_length():
 def test_halls_only_station():
     # alle hh == 0: kein Fehler, Auslegung nur aus Einspeisung
     gr = make_grid([-1, -1], [80, 120], [False, False], [0, 1], [0, 1])
-    load, feed = design_flows(gr, np.zeros(2, int), np.zeros(2), np.zeros(2), np.array([200.0, 0.0]))
+    load, feed = design_flows(gr, np.zeros(2, int), np.zeros(2), np.array([200.0, 0.0]), NO_DEVICES)
     assert np.isfinite(load).all() and (load == 0).all()
     assert feed.tolist() == [200.0, 0.0]
     s = size(gr, load, feed)

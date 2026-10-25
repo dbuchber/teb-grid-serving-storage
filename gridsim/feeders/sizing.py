@@ -44,20 +44,58 @@ def p_ev(n_cars: np.ndarray) -> np.ndarray:
     return np.where(n > 0, 0.53 + 10.47 * safe ** -1.264, 0.0)
 
 
-def design_flows(grid: StationGrid, hh, wp_kw_exp, cars_exp, kwp_peak_kw) -> tuple[np.ndarray, np.ndarray]:
-    """Auslegungsbezug und -einspeisung je Abschnitt in kW.
+DESIGN_QUANTILE = 0.9          # Fix-Runde 1: Geräte je Abschnitt als P90 der Binomialverteilung
 
-    Die vier Eingaben liegen je Station in ``grid.node_index``-Reihenfolge (Länge n) vor. Bezug eines
-    Abschnitts = P_HH·g(n_hh)·n_hh + Σ Wärmepumpen (Erwartungswert) + n_cars·p_ev(n_cars) über die Knoten hinter
-    dem Abschnitt. Ein erwartetes Auto unter 1 wird mit p_ev(1) gerechnet, damit es nie über 11 kW kommt.
+
+@dataclass(frozen=True)
+class DesignRule:
+    """Auslegungsregel „heute“ nach Fix-Runde 1 (Controller 25.10.2026).
+
+    ``wp_share``: Wahrscheinlichkeit einer Wärmepumpe je berechtigtem Gebäude (Wohngebäude ohne Fernwärme), wie
+    ``profiles.assign`` sie zieht (``p_wp``); ``ev_share``: E-Auto je Haushalt (``rng.binomial(hh, ev_share)``);
+    ``h0_peak_kw``: Haushaltslast des H0-Profils je Haushalt in der Auslegungsstunde (kW).
+    """
+    wp_share: float
+    ev_share: float
+    h0_peak_kw: float
+    quantile: float = DESIGN_QUANTILE
+
+
+def _binom_ppf(q, n, share):
+    """P-Quantil der Binomialverteilung je Abschnitt; n = 0 oder share = 0 → 0."""
+    from scipy.stats import binom
+    n = np.rint(np.asarray(n, dtype=float))
+    if share <= 0:
+        return np.zeros_like(n)
+    k = binom.ppf(q, np.maximum(n, 0), min(float(share), 1.0))
+    return np.where(n > 0, np.nan_to_num(k), 0.0)
+
+
+def design_flows(grid: StationGrid, hh, wp_kw, kwp_peak_kw, rule: DesignRule) -> tuple[np.ndarray, np.ndarray]:
+    """Auslegungsbezug und -einspeisung je Abschnitt in kW (Fix-Runde 1).
+
+    Eingaben je Station in ``grid.node_index``-Reihenfolge: ``hh`` Haushalte, ``wp_kw`` elektrische Leistung einer
+    Wärmepumpe am Knoten in der Auslegungsstunde (0 = Knoten kann keine Wärmepumpe haben), ``kwp_peak_kw``
+    PV-Spitze. Bezug eines Abschnitts mit n Haushalten und m WP-berechtigten Knoten dahinter:
+
+    - Haushalte: n · max(P_HH · g(n), H0-Spitze je Haushalt),
+    - Wärmepumpen: k = P90 Binomial(m, wp_share) ganze Geräte × mittlere Leistung der berechtigten Knoten
+      dahinter (alle gleichzeitig, wie gridsim in der kältesten Stunde ohne Versatz),
+    - E-Autos: k = P90 Binomial(n, ev_share) Autos × p_ev(k) (11 kW je Auto bei k = 1).
+
     Einspeisung = Σ Spitzenleistung der Anlagen hinter dem Abschnitt.
     """
     d = grid.downstream.astype(float)
     n_hh = d @ np.asarray(hh, dtype=float)
-    n_cars = d @ np.asarray(cars_exp, dtype=float)
-    p_wp = d @ np.asarray(wp_kw_exp, dtype=float)
+    wp = np.asarray(wp_kw, dtype=float)
+    n_el = d @ (wp > 0).astype(float)
+    wp_sum = d @ wp
     p_feed = d @ np.asarray(kwp_peak_kw, dtype=float)
-    p_load = P_HH_KW * g(n_hh) * n_hh + p_wp + n_cars * p_ev(np.maximum(n_cars, 1.0))
+    p_hh = n_hh * np.maximum(P_HH_KW * g(n_hh), rule.h0_peak_kw)
+    k_wp = _binom_ppf(rule.quantile, n_el, rule.wp_share)
+    p_wp = np.divide(k_wp * wp_sum, n_el, out=np.zeros_like(wp_sum), where=n_el > 0)
+    k_ev = _binom_ppf(rule.quantile, n_hh, rule.ev_share)
+    p_load = p_hh + p_wp + k_ev * p_ev(k_ev)
     return p_load, p_feed
 
 

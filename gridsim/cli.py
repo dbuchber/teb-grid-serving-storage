@@ -123,7 +123,7 @@ def main(argv=None):
         from gridsim.feeders.report import lines_report
         data = lines_report(args.prepared, args.cache, args.report)
         acc = data['acceptance']
-        print(json.dumps(None if acc is None else {k: acc[k] for k in ('passed', 'passed_scaled', 'missing_years')}
+        print(json.dumps(None if acc is None else {k: acc[k] for k in ('passed', 'missing_years')}
                          | {'over_100': acc['combined']['over_100'], 'over_120': acc['combined']['over_120']}))
         print('report', args.report)
     elif args.cmd == 'validate':

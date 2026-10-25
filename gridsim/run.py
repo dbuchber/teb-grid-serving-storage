@@ -25,7 +25,7 @@ STORAGE = ('base', 'forecast', 'room')
 LIMITS = ('trafo', 'trafo+leitung')
 BASE_SEED = 20261024
 # Bei jeder Änderung an Modell oder Kennzahlen erhöhen: Teil des Cache-Schlüssels, alte Ergebnisse gelten dann nicht mehr
-MODEL_VERSION = '2026-10-26.1'
+MODEL_VERSION = '2026-10-26.2'  # .2: Bemessungsregel Fix-Runde 1, Trafo-Rundung im Leitungsmodus
 MAX_SEEDS = 50
 
 

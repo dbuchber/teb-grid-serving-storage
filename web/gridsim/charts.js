@@ -18,7 +18,7 @@ export function el(tag, attrs = {}, ...children) {
 const svg = (w, h, cls) => el("svg:svg", { viewBox: `0 0 ${w} ${h}`, class: cls, role: "img", preserveAspectRatio: "xMidYMid meet" });
 
 export const TILES = [
-  { key: "stations_load_congestion", label: "Transformers overloaded (demand)", unit: "of 257", digits: 0 },
+  { key: "stations_load_congestion", label: "Transformers overloaded (demand)", unit: n => (n ? `of ${n}` : "stations"), digits: 0 },
   { key: "congestion_h_median", label: "Overload hours per year", unit: "median station", digits: 0 },
   { key: "e_net_mwh", label: "Energy above limit", unit: "MWh, sum of largest events", digits: 1 },
   { key: "storage_units", label: "Home batteries needed", unit: "10 kWh / 5 kW units", digits: 0 },
@@ -33,6 +33,11 @@ export const TILES = [
   { key: "netzspeicher_kwh", label: "Grid storage at line bottlenecks", unit: "kWh installed", digits: 0, optional: true },
 ];
 
+// Stationszahl des Laufs (region.n_stations der Seeds), null vor dem ersten Seed
+const stationCount = seeds => seeds.find(s => typeof s.region?.n_stations === "number")?.region.n_stations ?? null;
+export const tileUnit = (t, seeds) => (typeof t.unit === "function" ? t.unit(stationCount(seeds)) : t.unit);
+export const regionTitle = n => `Regional simulation: all ${n ? `${n} ` : ""}transformers in the Steyr area`;
+
 // Kacheln, die zu den Seeds passen: optionale (Leitungs-)Kacheln nur, wenn mindestens ein Seed einen Wert liefert
 export const visibleTiles = seeds => TILES.filter(t => !t.optional || seeds.some(s => typeof s.region[t.key] === "number"));
 
@@ -43,7 +48,7 @@ export function renderTiles(root, seeds, nTotal) {
     return el("div", { class: "gs-tile" },
       el("div", { class: "gs-tile-label", text: t.label }),
       el("div", { class: "gs-tile-value", text: b.n ? fmt(b.median, t.digits) : "–" }),
-      el("div", { class: "gs-tile-unit", text: `${t.unit}${range ? ` · band ${range}` : ""}` }));
+      el("div", { class: "gs-tile-unit", text: `${tileUnit(t, seeds)}${range ? ` · band ${range}` : ""}` }));
   }), el("div", { class: "gs-tile-foot", text: `Median and 10–90 % band over ${seeds.length} of ${nTotal} random seeds · model values` }));
 }
 

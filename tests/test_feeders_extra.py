@@ -11,6 +11,12 @@ from gridsim import legacy
 from gridsim.data import ARRAYS
 from gridsim.feeders.extra_stations import SNAP_M, plan_extra, prepare_extra_stations, reassign
 from gridsim.feeders.prepare import TO_WGS84, build_grids, marked_share, node_feeder
+from gridsim.feeders.sizing import DesignRule
+
+
+def no_loads(zeros):
+    """Auslegung nur aus Haushalten nach P_HH · g(n): keine Geräte, keine H0-Untergrenze."""
+    return {'wp_kw': zeros, 'kwp_peak': zeros, 'rule': DesignRule(wp_share=0.0, ev_share=0.0, h0_peak_kw=0.0)}
 from gridsim.feeders.roads import TO_LAMBERT, RoadGraph
 
 C = np.array(TO_LAMBERT.transform(*ROADS_CENTER))      # Kreuzung der Fake-Straßen
@@ -33,7 +39,7 @@ def grids_for(st_xy, xy, st_of, roads, hh=None):
     n = len(xy)
     hh = np.ones(n, int) if hh is None else np.asarray(hh)
     zeros = np.zeros(n)
-    return build_grids(np.asarray(st_xy, float), xy, hh, zeros, np.asarray(st_of), (zeros, zeros, zeros), roads,
+    return build_grids(np.asarray(st_xy, float), xy, hh, zeros, np.asarray(st_of), no_loads(zeros), roads,
                        len(st_xy))
 
 
@@ -138,7 +144,7 @@ def test_small_cluster_skipped(roads):
     hh[18:] = 0                                                   # nur 2 Wohngebäude draußen, 6 Hallen
     st_of = np.zeros(len(xy), int)
     zeros = np.zeros(len(xy))
-    grids = build_grids(C[None, :], xy, hh, zeros, st_of, (zeros, zeros, zeros), roads, 1)
+    grids = build_grids(C[None, :], xy, hh, zeros, st_of, no_loads(zeros), roads, 1)
     assert not grids[0][0].marked.any()                           # nach Wohngebäuden: Ausläufer
     grids[0][0].marked[:] = grids[0][0].tail                      # erzwungen markiert: Cluster trotzdem zu klein
     skipped = []

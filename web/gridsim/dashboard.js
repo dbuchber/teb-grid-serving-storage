@@ -1,8 +1,8 @@
-// Regionen-Dashboard (Session 1f): echte gridsim-Läufe über alle 257 Stationen, Band wächst mit jedem Seed.
+// Regionen-Dashboard (Session 1f): echte gridsim-Läufe über alle Stationen des Servers, Band wächst mit jedem Seed.
 // Einbettung: mount(el, { apiBase: "/api/", stations, onSelectStation }) – siehe app.js der Seite.
 import { createApi } from "./api.js";
 import { BOTTLENECK, bandOf, bottleneckClass, bottleneckValues, costItems, effectiveNotice, fmt, lineStations, stationValues } from "./band.js";
-import { el, renderCompare, renderDay, renderStrip, renderTiles } from "./charts.js";
+import { el, regionTitle, renderCompare, renderDay, renderStrip, renderTiles } from "./charts.js";
 import { createStationMap } from "./map.js";
 
 const LABELS = {
@@ -29,6 +29,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
   const select = (name, values) => el("label", { class: "gs-field" }, el("span", { text: FIELD_LABELS[name] }),
     el("select", { name, onchange: e => { state[name] = NUMERIC.includes(name) ? +e.target.value : name === "netzspeicher" ? e.target.value === "true" : e.target.value; } },
       ...values.map(v => el("option", { value: v, text: LABELS[name][v] ?? v, selected: String(v) === String(state[name]) || undefined }))));
+  const title = el("h3", { text: regionTitle(null) });   // Stationszahl vom Server (api.stations), sobald bekannt
   const status = el("p", { class: "gs-status", role: "status", "aria-live": "polite" });
   const tiles = el("div", { class: "gs-tiles" });
   const strip = el("div", { class: "gs-chart" });
@@ -50,7 +51,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
 
   root.classList.add("gs-root");
   root.replaceChildren(
-    el("h3", { text: "Regional simulation: all 257 transformers in the Steyr area" }),
+    title,
     el("p", { class: "gs-hint", text: "Each run simulates a full year hour by hour with 20 random seeds (where heat pumps and EVs are, when cars arrive). The band shows how much the result depends on chance." }),
     controls, status, tiles, strip,
     el("div", { class: "gs-split" }, el("div", { class: "gs-map-wrap" }, mapBox, mapTools), day),
@@ -113,6 +114,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
       const list = await api.stations(state.weather_year);
       state.ids = list.map(s => s.id);
       state.idxs = list.map(s => s.idx);   // Stationsindex der Leitungsdaten
+      title.textContent = regionTitle(list.length);
       const asked = { limits: state.limits, netzspeicher: state.netzspeicher };
       const say = text => { const n = effectiveNotice(state.seeds, asked); status.textContent = n ? `${text} · ${n}` : text; };
       const r = await api.startRun(params());
@@ -201,6 +203,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     } catch (e) { costOut.textContent = `Costs unavailable: ${e.message}`; }
   }
 
+  api.stations(DEFAULTS.weather_year).then(list => { title.textContent = regionTitle(list.length); }).catch(() => {});
   api.options().then(o => {
     state.options = o;
     state.nSeeds = o.n_seeds;

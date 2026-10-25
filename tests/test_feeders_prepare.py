@@ -107,25 +107,30 @@ def test_prepare_feeders_rejects_build_members_mismatch(setup, monkeypatch):
 
 
 def test_design_loads_heute(tmp_path):
-    from gridsim import profiles
+    """Fix-Runde 1: volle WP-Leistung je berechtigtem Knoten, Anteile wie profiles.assign, H0-Spitze aus h0."""
+    from gridsim import legacy, profiles
     from gridsim.data import load_prepared
     from gridsim.feeders.prepare import design_loads
     from gridsim.run import BASE_SEED
     p = load_prepared(write_fake_prepared(tmp_path, 2012), 2012)
-    wp, cars, pv = design_loads(p)
+    loads = design_loads(p)
+    wp, pv, rule = loads['wp_kw'], loads['kwp_peak'], loads['rule']
     share = profiles.SCENARIOS['heute']
     hh = np.asarray(p.nodes_hh)
     assert wp[2] == 0.0 and (wp[8:] == 0).all()                    # Fernwärme und Hallen ohne Wärmepumpe
     assert (wp[[0, 1, 3, 4, 5, 6, 7]] > 0).all()
-    assert np.allclose(cars, share['ev_share'] * hh)
     assert np.allclose(pv, np.asarray(p.nodes_kwp_bins).sum(axis=1) * float(np.max(p.pv_bins)))
-    # Knoten 0 von Hand: p_wp × Leistung in der kältesten Stunde der Zelle 0, Versatz 0
     fw_frac = np.asarray(p.nodes_fw)[hh > 0].mean()
-    p_wp = min(1.0, share['wp_share'] / (1 - fw_frac))
+    assert rule.wp_share == pytest.approx(min(1.0, share['wp_share'] / (1 - fw_frac)))
+    assert rule.ev_share == share['ev_share']
+    h0 = np.asarray(p.h0, dtype=float) * legacy.load('steyr_sim_variant_a').KWH_PER_HH
+    cold = int(np.argmin(np.asarray(p.temp_cells, dtype=float).mean(axis=1)))
+    assert rule.h0_peak_kw == pytest.approx(max(h0[cold], h0.max()))
+    # Knoten 0 von Hand: volle Leistung (ohne Anteil) in der kältesten Stunde der Zelle 0, Versatz 0
     limits, _ = profiles.wpev.spread(len(hh), BASE_SEED)
     t = np.asarray(p.temp_cells[:, 0], dtype=float)
     el = profiles.heat_pump_kw(t, np.array([18000.0]), limits[:1], np.zeros(1, int), np.array([0.15]))
-    assert wp[0] == pytest.approx(p_wp * float(el[int(np.argmin(t)), 0]), rel=1e-5)  # float32
+    assert wp[0] == pytest.approx(float(el[int(np.argmin(t)), 0]), rel=1e-5)  # float32
 
 
 def test_cli_prepare_feeders(setup, capsys):

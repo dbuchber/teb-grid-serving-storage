@@ -4,7 +4,7 @@ import pytest
 from fakes import FEEDER_NODE_OFFSET_M, write_fake_prepared
 from gridsim.data import load_prepared
 from gridsim.feeders.loading import loading_pct, segment_flow, surcharge_factor
-from gridsim.feeders.sizing import SizedGrid, design_flows, size
+from gridsim.feeders.sizing import DesignRule, SizedGrid, design_flows, size
 from gridsim.feeders.topology import build_station_grid
 from gridsim.nodeflow import station_block
 from gridsim.run import RunParams, flows
@@ -19,7 +19,7 @@ def fake_feeder(p, s):
     hh = np.asarray(p.nodes_hh)[nodes]
     kwp = np.asarray(p.nodes_kwp_bins, dtype=float)[nodes].sum(axis=1)
     grid = build_station_grid(s, (0.0, 0.0), nodes, xy, hh, kwp, None)
-    load, feed = design_flows(grid, hh, np.ones(len(nodes)), 0.5 * hh, kwp)
+    load, feed = design_flows(grid, hh, np.ones(len(nodes)), kwp, DesignRule(wp_share=1.0, ev_share=0.5, h0_peak_kw=0.0))
     return grid, size(grid, load, feed)
 
 

@@ -12,12 +12,14 @@ vorbereiteten Arrays in ``prepared/<jahr>/`` und das Straßennetz ``osm_roads.js
 - ``report.json``: Regionswerte (Prüfziele Spec 4.2, Kabelanteil 4.1).
 - ``manifest.json``: SHA256 der Eingaben und Schwellen.
 
-Auslegungslast je Knoten (Spec 4.3, Entscheidung 5), Szenario „heute“ als Erwartungswert, Wetterjahr 2012:
-Wärmepumpe = p_wp × elektrische Leistung in der Stunde mit der tiefsten Temperatur der Knotenzelle
-(``profiles.heat_pump_kw``, Wärme wie ``profiles.assign``, Heizgrenze aus ``wpev.spread(N, BASE_SEED)``,
-Versatz 0; Fernwärme 0); E-Autos = ev_share × Haushalte; PV-Spitze = kWp × max(pv_bins).
+Auslegung (Spec 4.3, Entscheidung 5, Fix-Runde 1 vom 25.10.2026), Szenario „heute“, Wetterjahr 2012: je Knoten
+die volle Wärmepumpenleistung in der Stunde mit der tiefsten Temperatur der Knotenzelle (``profiles.heat_pump_kw``,
+Wärme wie ``profiles.assign``, Heizgrenze aus ``wpev.spread(N, BASE_SEED)``, Versatz 0; Fernwärme 0) und die
+PV-Spitze = kWp × max(pv_bins); je Abschnitt ganze Geräte als P90 der Binomialverteilung und Haushaltslast nicht
+unter der H0-Spitze (``sizing.design_flows``, ``design_loads``).
 """
 import hashlib
+from dataclasses import asdict
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,7 +32,7 @@ from gridsim import legacy
 from gridsim.data import load_prepared
 from gridsim.feeders.area import AREAS
 from gridsim.feeders.roads import RoadGraph
-from gridsim.feeders.sizing import SizedGrid, design_flows, size
+from gridsim.feeders.sizing import DesignRule, SizedGrid, design_flows, size
 from gridsim.feeders.topology import TAIL_MIN_HOMES, StationGrid, build_station_grid
 
 DESIGN_YEAR = 2012
@@ -120,7 +122,13 @@ def _check_nodes(prepared_root, years, st_of, hh):
 
 
 def design_loads(p):
-    """Auslegungslast je Knoten (global): Wärmepumpe kW, erwartete E-Autos, PV-Spitze kW (siehe Moduldoku)."""
+    """Auslegungseingaben je Knoten (global) und Regel (Fix-Runde 1, siehe ``sizing.design_flows``).
+
+    ``wp_kw``: elektrische Leistung einer Wärmepumpe am Knoten in der kältesten Stunde seiner Zelle (Wärme wie
+    ``profiles.assign``, Versatz 0), 0 für Knoten ohne mögliche WP (Hallen, Fernwärme); ``kwp_peak``: PV-Spitze;
+    ``rule``: Anteile wie ``profiles.assign`` (``p_wp`` je berechtigtem Gebäude, ``ev_share`` je Haushalt) und
+    H0-Spitze je Haushalt = max(H0 in der kältesten Stunde des Auslegungsjahrs, Jahresspitze des H0-Profils).
+    """
     from gridsim import profiles
     from gridsim.run import BASE_SEED
     share = profiles.SCENARIOS[DESIGN_SCENARIO]
@@ -146,9 +154,12 @@ def design_loads(p):
             part = idx[k:k + CHUNK]
             el = profiles.heat_pump_kw(temp[:, c], heat[part], limits[part], np.zeros(len(part), int), dhw[part])
             wp_kw[part] = el[cold]
-    cars = np.where(homes, share['ev_share'] * hh, 0.0)
     kwp = np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1)
-    return p_wp * wp_kw, cars, kwp * float(np.max(p.pv_bins))
+    h0 = np.asarray(p.h0, dtype=float) * legacy.load('steyr_sim_variant_a').KWH_PER_HH   # wie nodeflow
+    cold = int(np.argmin(temp.mean(axis=1)))
+    rule = DesignRule(wp_share=float(p_wp), ev_share=float(share['ev_share']),
+                      h0_peak_kw=float(max(h0[cold], h0.max())))
+    return {'wp_kw': wp_kw, 'kwp_peak': kwp * float(np.max(p.pv_bins)), 'rule': rule}
 
 
 def _save_station(path, grid: StationGrid, sized: SizedGrid, p_load=None, p_feed=None):
@@ -359,14 +370,14 @@ def marked_share(grids):
 def build_grids(st_xy, xy, hh, kwp, st_of, loads, roads, n_stations):
     """Netz und Bemessung je Station: {s: (StationGrid, SizedGrid, p_load, p_feed)}.
 
-    ``xy``/``hh``/``kwp``/``st_of`` und ``loads`` = (wp_kw, cars, kwp_peak) sind global je Knoten.
+    ``xy``/``hh``/``kwp``/``st_of`` sind global je Knoten, ``loads`` aus ``design_loads``.
     """
-    wp_kw, cars, kwp_peak = loads
+    wp_kw, kwp_peak, rule = loads['wp_kw'], loads['kwp_peak'], loads['rule']
     grids = {}
     for s in range(n_stations):
         idx = np.flatnonzero(st_of == s)
         grid = build_station_grid(s, st_xy[s], idx, xy[idx], hh[idx], kwp[idx], roads)
-        p_load, p_feed = design_flows(grid, hh[idx], wp_kw[idx], cars[idx], kwp_peak[idx])
+        p_load, p_feed = design_flows(grid, hh[idx], wp_kw[idx], kwp_peak[idx], rule)
         grids[s] = (grid, size(grid, p_load, p_feed), p_load, p_feed)
     return grids
 
@@ -408,7 +419,8 @@ def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
     (out / 'report.json').write_text(json.dumps(_report(summaries, grids), ensure_ascii=False, indent=1))
     files = [f for f in (*MEMBER_INPUTS, ROADS_FILE) if (inp / f).exists()]
     manifest = {'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                'design': {'year': DESIGN_YEAR, 'scenario': DESIGN_SCENARIO},
+                'design': {'year': DESIGN_YEAR, 'scenario': DESIGN_SCENARIO, 'rule': 'fix1-binom-p90-h0peak',
+                           **asdict(ctx['loads']['rule'])},
                 'legacy_frozen_at': legacy.FROZEN_AT,
                 'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),
                 'roads': roads is not None,

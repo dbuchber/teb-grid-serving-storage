@@ -7,12 +7,10 @@ Gerechnet wird hier nur die optionale Diagnose (``segment_table`` für einen See
 Abnahmegrenze (Entscheidung 6, Global Constraints): Szenario heute, PV 1,0, Speicher base, ungesteuert,
 Grenzmodus trafo, ohne Netzspeicher, Wetterjahre 2012/2017/2023; je Station und Jahr das P90 über die Seeds der
 höchsten Abschnittsauslastung (``station_line_max_pct``, beide Richtungen), dann das Maximum über die Jahre.
-Bestanden, wenn höchstens 5 Stationen über 100 % und keine über 120 % liegen. Die Zahl 5 bezieht sich in der
-Regel auf 257 Stationen; bei einer anderen Stationszahl wird der anteilige Wert zusätzlich berichtet, entschieden
-wird nach der Regel wie geschrieben.
+Bestanden, wenn höchstens 5 Stationen über 100 % und keine über 120 % liegen, gleich wie viele Stationen die
+Variante hat (Controller, Fix-Runde 1: 5 von 465 bei ``prepared-ns``).
 """
 import json
-import math
 import re
 import warnings
 from collections import Counter
@@ -27,7 +25,7 @@ ACCEPT_PARAMS = {'scenario': 'heute', 'pv_factor': 1.0, 'storage': 'base', 'char
                  'limits': 'trafo', 'netzspeicher': False}
 ACCEPT_YEARS = (2012, 2017, 2023)
 LIMIT_PCT, HARD_PCT = 100.0, 120.0
-MAX_OVER, RULE_STATIONS = 5, 257
+MAX_OVER = 5
 SEVERITY = ('keiner', 'trafo', 'leitung', 'beide')     # Gleichstand: schwerere Klasse (wie web/gridsim/band.js)
 CHAIN = ('heute', '2030', '2040')
 
@@ -93,13 +91,10 @@ def acceptance(by_year, n_stations=None):
         worst = np.nanmax(np.vstack(p90s), axis=0) if p90s else np.zeros(0)
     n = int(n_stations if n_stations is not None else len(worst))
     out = {'years': years, 'combined': _verdict(worst, min((len(r) for r in by_year.values()), default=0)),
-           'n_stations': n, 'max_over': MAX_OVER, 'rule_stations': RULE_STATIONS,
-           'max_over_scaled': math.floor(MAX_OVER * n / RULE_STATIONS),
+           'n_stations': n, 'max_over': MAX_OVER,
            'missing_years': [y for y in ACCEPT_YEARS if y not in by_year], 'worst_p90': worst}
     c = out['combined']
     out['passed'] = not out['missing_years'] and c['over_100'] <= MAX_OVER and c['over_120'] == 0
-    out['passed_scaled'] = (not out['missing_years'] and c['over_100'] <= out['max_over_scaled']
-                            and c['over_120'] == 0)
     return out
 
 
@@ -282,11 +277,9 @@ def render(rep, index, acc, rows, chains):
                      f"{_fmt(v['max'], 1)} % |")
         L.append(f"| alle (Maximum je Station) | {c['n_seeds']} | {c['over_100']} | {c['over_120']} | "
                  f"{_fmt(c['median'], 1)} % | {_fmt(c['max'], 1)} % |")
-        L += ['', f"Regel: höchstens {acc['max_over']} von {acc['rule_stations']} Stationen über 100 %, keine über "
-                  f"120 %. Ergebnis bei {acc['n_stations']} Stationen: **{'bestanden' if acc['passed'] else 'nicht bestanden'}**"
-                  f" ({c['over_100']} über 100 %, {c['over_120']} über 120 %). Anteilig umgerechnet (höchstens "
-                  f"{acc['max_over_scaled']} von {acc['n_stations']}): "
-                  f"{'bestanden' if acc['passed_scaled'] else 'nicht bestanden'}."]
+        L += ['', f"Regel: höchstens {acc['max_over']} von {acc['n_stations']} Stationen über 100 %, keine über "
+                  f"120 %. Ergebnis: **{'bestanden' if acc['passed'] else 'nicht bestanden'}**"
+                  f" ({c['over_100']} über 100 %, {c['over_120']} über 120 %)."]
         if acc['missing_years']:
             L.append(f"Fehlende Wetterjahre: {acc['missing_years']}.")
         L.append('')
