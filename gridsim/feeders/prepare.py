@@ -222,7 +222,7 @@ def node_feeder(grid):
     return np.array([grid.feeder[d.indices[d.indptr[i]]] for i in range(d.shape[1])], dtype=int)
 
 
-def _station_summary(grid, sized):
+def _station_summary(grid, sized, n_buildings=None):
     trunk = ~grid.service
     sys_len = grid.length_m.astype(float) * sized.parallel
     route_c, route_o = _route(grid)
@@ -236,6 +236,7 @@ def _station_summary(grid, sized):
         has_nodes[end_feeder] = True
     return {
         'area': grid.area, 'n_nodes': int(len(grid.node_index)), 'n_feeders': int(n_feeder),
+        'n_buildings': None if n_buildings is None else int(n_buildings),
         'marked_long': int(grid.marked.sum()), 'marked_sizing': int(sized.marked.sum()),
         'marked': int((grid.marked | sized.marked).sum()),
         'trunk_m': round(float(sys_len[trunk].sum()), 1),
@@ -253,6 +254,21 @@ def _stats(values):
         return {'n': 0, 'mean': None, 'median': None, 'p90': None}
     return {'n': int(len(v)), 'mean': round(float(v.mean()), 2), 'median': round(float(np.median(v)), 2),
             'p90': round(float(np.percentile(v, 90)), 2)}
+
+
+def _per_building(s, route):
+    """Plausibilität je Gebäude (Wohngebäude, hh > 0): Gebäude je Station und Trassenmeter je Gebäude.
+
+    Orientierung (Netz OÖ): ca. 58 Kundenanlagen je Station, ca. 46 m NS-Leitung je Anlage.
+    """
+    nb = [x['n_buildings'] for x in s if x.get('n_buildings') is not None]
+    if len(nb) != len(s) or not nb:
+        return None
+    total = sum(nb)
+    return {'buildings_per_station': _stats(nb), 'buildings': int(total),
+            'route_m_per_building': round(route / total, 1) if total else None,
+            'target': {'buildings_per_station': 58, 'route_m_per_building': 46},
+            'definition': 'Gebäude = Wohngebäude (hh > 0); Trasse ohne Hausanschlüsse; nur zur Orientierung'}
 
 
 def _report(summaries, grids):
@@ -290,8 +306,9 @@ def _report(summaries, grids):
             'by_cable_length': round(1 - over / trunk, 4) if trunk else None,
             'by_route_length': round(1 - route_o / route, 4) if route else None,
             'by_cable_length_incl_service': round(1 - (over + svc_o) / (trunk + svc), 4) if trunk + svc else None,
+            'acceptance': 'by_route_length',
             'definition': 'ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt '
-                          'gemeinsame Gräben einmal',
+                          'gemeinsame Gräben und Parallelsysteme einmal (Abnahmegröße: by_route_length)',
             'target': 0.79, 'band': [0.74, 0.84]},
         'trunk_km_per_station': {'cable_length': round(trunk / n / 1000, 3) if n else None,
                                  'route_length': round(route / n / 1000, 3) if n else None,
@@ -299,6 +316,7 @@ def _report(summaries, grids):
         'total_km': {'trunk_cable': round(trunk / 1000, 2), 'trunk_route': round(route / 1000, 2),
                      'service': round(svc / 1000, 2)},
         'feeders_per_station': {**_stats([x['n_feeders'] for x in s]), 'target': [3.4, 3.8]},
+        'per_building': _per_building(s, route),
         'areas': areas,
         'km_per_type': {k: round(v, 2) for k, v in sorted(km_type.items())},
         'thresholds': {a.name: {'max_nn_m': a.max_nn_m if np.isfinite(a.max_nn_m) else None,
@@ -372,7 +390,7 @@ def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
     for s, (grid, sized, p_load, p_feed) in built.items():
         _save_station(out / f'{s}.npz', grid, sized, p_load, p_feed)
         grids[s] = (grid, sized)
-        summaries[s] = _station_summary(grid, sized)
+        summaries[s] = _station_summary(grid, sized, int((ctx['hh'][grid.node_index] > 0).sum()))
 
     index = {str(s): {k: v for k, v in x.items() if k != 'reach_m'} for s, x in summaries.items()}
     (out / 'index.json').write_text(json.dumps(index, ensure_ascii=False))

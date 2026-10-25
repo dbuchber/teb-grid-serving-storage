@@ -5,13 +5,15 @@ unverändert. Ablauf (``prepare_extra_stations``):
 
 1. Netze aller Stationen bauen und bemessen wie ``prepare-feeders``.
 2. ``plan_extra``: je Station mit markiertem Abgang (zu lang oder Bemessung scheitert) die Knoten dieser Abgänge
-   per k-Means gruppieren; k = kleinste Zahl, bei der kein Cluster mehr als 30 Knoten hat und kein Knoten weiter
+   per k-Means gruppieren; k = kleinste Zahl, bei der kein Cluster mehr als ``MAX_CLUSTER`` Knoten hat (3,5 Abgänge
+   × 30; Controller-Entscheidung, Netz OÖ im Mittel ca. 58 Anlagen je Station) und kein Knoten weiter
    als ``max_feeder_m`` / 1,2 (Luftlinie, Umwegfaktor) vom Clusterzentrum liegt. Standort = Wohngebäude nächst
    dem Zentrum (nur Hallen im Cluster: Knoten nächst dem Zentrum), auf den nächsten Straßenknoten gezogen, wenn
    einer höchstens ``SNAP_M`` entfernt ist.
-3. ``reassign``: jeder Knoten (Gebäude und PV-Hallen) zur nächsten Station (alt + neu) entlang der Straße
-   (``RoadGraph.nearest_station``); ohne Straßenverbindung nächste Station in Luftlinie (≤ 600 m wie
-   ``build_members``; weiter weg trotzdem, gezählt). Kein Knoten bleibt ohne Station.
+3. ``reassign``: nur Knoten markierter Abgänge (Gebäude und PV-Hallen) wechseln, und zwar zur nächsten Station
+   (alt + neu) entlang der Straße (``RoadGraph.nearest_station``); ohne Straßenverbindung nächste Station in
+   Luftlinie (≤ 600 m wie ``build_members``; weiter weg trotzdem, gezählt). Alle übrigen Knoten behalten ihre
+   Station. Kein Knoten bleibt ohne Station.
 4. Stationen ohne Knoten fallen aus der Variante (gezählt).
 5. Sind danach mehr als 10 % der Stationen markiert, ein zweiter Durchgang (2.–4.), danach wird berichtet statt
    weiter iteriert.
@@ -45,17 +47,18 @@ AIR_MAX_M = 600.0       # Luftlinien-Zuordnung ohne Straße wie build_members (b
 MAX_PASSES = 2
 MARKED_LIMIT = 0.10     # Anteil markierter Stationen, ab dem ein weiterer Durchgang läuft
 SEED = 20261025         # k-Means; je Station SEED + Stationsindex
+MAX_CLUSTER = int(3.5 * MAX_BUILDINGS)   # 105 Knoten je Zusatzstation (3,5 Abgänge × 30)
 
 
 def _clusters(pts, radius, seed):
-    """Kleinste k-Means-Teilung: ≤ MAX_BUILDINGS Punkte je Cluster, alle Punkte ≤ ``radius`` vom Zentrum.
+    """Kleinste k-Means-Teilung: ≤ MAX_CLUSTER Punkte je Cluster, alle Punkte ≤ ``radius`` vom Zentrum.
 
     Gibt Liste von (Indexarray, Zentrum) zurück; leere Cluster entfallen.
     """
     n = len(pts)
     origin = pts.mean(axis=0)
     rel = pts - origin
-    for k in range(max(1, math.ceil(n / MAX_BUILDINGS)), n + 1):
+    for k in range(max(1, math.ceil(n / MAX_CLUSTER)), n + 1):
         if k == n:
             labels = np.arange(n)
         elif k == 1:
@@ -68,12 +71,26 @@ def _clusters(pts, radius, seed):
         for lab in np.unique(labels):
             idx = np.flatnonzero(labels == lab)
             centre = rel[idx].mean(axis=0)
-            if len(idx) > MAX_BUILDINGS or np.hypot(*(rel[idx] - centre).T).max() > radius:
+            if len(idx) > MAX_CLUSTER or np.hypot(*(rel[idx] - centre).T).max() > radius:
                 break
             out.append((idx, centre + origin))
         else:
             return out
     raise AssertionError('unerreichbar: Einzelcluster erfüllen immer beide Bedingungen')
+
+
+def _marked_local(grid, sized):
+    """Lokale Knotenindizes (``grid.node_index``-Reihenfolge) auf markierten Abgängen."""
+    bad = grid.marked | sized.marked
+    if not bad.any() or not len(grid.node_index):
+        return np.zeros(0, int)
+    return np.flatnonzero(bad[node_feeder(grid)])
+
+
+def marked_nodes(grids: dict) -> np.ndarray:
+    """Globale Knotenindizes auf markierten Abgängen aller Stationen (dürfen die Station wechseln)."""
+    parts = [np.asarray(g[0].node_index)[_marked_local(g[0], g[1])] for g in grids.values()]
+    return np.sort(np.concatenate(parts)).astype(int) if parts else np.zeros(0, int)
 
 
 def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None, station_ids=None,
@@ -88,10 +105,9 @@ def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None
     new = []
     for s in sorted(grids):
         grid, sized = grids[s][0], grids[s][1]
-        bad = grid.marked | sized.marked
-        if not bad.any() or not len(grid.node_index):
+        local = _marked_local(grid, sized)
+        if not len(local):
             continue
-        local = np.flatnonzero(bad[node_feeder(grid)])
         idx = np.asarray(grid.node_index)[local]
         radius = AREAS[grid.area].max_feeder_m / LINE_DETOUR
         for members, centre in _clusters(xy[idx], radius, SEED + int(s)):
@@ -110,19 +126,30 @@ def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None
     return new
 
 
-def reassign(st_xy, nodes_xy, roads):
-    """Station je Knoten (siehe Moduldoku, Schritt 3) und Zählung {'road', 'air', 'air_far'}."""
+def reassign(st_xy, nodes_xy, roads, current=None, movable=None):
+    """Station je Knoten (siehe Moduldoku, Schritt 3) und Zählung {'road', 'air', 'air_far'} der bewegten Knoten.
+
+    ``current``: bisherige Station je Knoten; ``movable``: Indizes der Knoten, die wechseln dürfen. Ohne beides
+    werden alle Knoten zugeordnet.
+    """
     st_xy = np.asarray(st_xy, dtype=float).reshape(-1, 2)
     xy = np.asarray(nodes_xy, dtype=float).reshape(-1, 2)
-    st_of = np.full(len(xy), -1)
-    if roads is not None and len(xy):
-        st_of, _, _ = roads.nearest_station(st_xy, xy)
+    if current is None:
+        out, mov = np.full(len(xy), -1, dtype=np.int32), np.arange(len(xy))
+    else:
+        out = np.asarray(current, dtype=np.int32).copy()
+        mov = np.arange(len(xy)) if movable is None else np.asarray(movable, dtype=int)
+    pts = xy[mov]
+    st_of = np.full(len(pts), -1)
+    if roads is not None and len(pts):
+        st_of, _, _ = roads.nearest_station(st_xy, pts)
         st_of = np.asarray(st_of).copy()
-    d, near = cKDTree(st_xy).query(xy) if len(xy) else (np.zeros(0), np.zeros(0, int))
+    d, near = cKDTree(st_xy).query(pts) if len(pts) else (np.zeros(0), np.zeros(0, int))
     miss = st_of < 0
     st_of[miss] = near[miss]
-    return st_of.astype(np.int32), {'road': int((~miss).sum()), 'air': int((miss & (d <= AIR_MAX_M)).sum()),
-                                    'air_far': int((miss & (d > AIR_MAX_M)).sum())}
+    out[mov] = st_of
+    return out, {'road': int((~miss).sum()), 'air': int((miss & (d <= AIR_MAX_M)).sum()),
+                 'air_far': int((miss & (d > AIR_MAX_M)).sum())}
 
 
 def _station_rows(stations, st_of, hh, kwp):
@@ -197,12 +224,14 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
         st_xy = np.array([[s['x'], s['y']] for s in stations], dtype=float)
         new = plan_extra(st_xy, xy, hh, st_of, grids, roads=roads, station_ids=[s['id'] for s in stations],
                          start=next_id)
+        movable = marked_nodes(grids)
         uw = {s['id']: s['uw'] for s in stations}
         stations += [{**s, 'uw': uw[s['parent']], 'old': False} for s in new]
         next_id += len(new)
         added += len(new)
         st_xy = np.array([[s['x'], s['y']] for s in stations], dtype=float)
-        st_of, info = reassign(st_xy, xy, roads)
+        st_of, info = reassign(st_xy, xy, roads, current=st_of, movable=movable)
+        info['movable'] = int(len(movable))
         keep = np.unique(st_of)
         gone = [stations[i] for i in sorted(set(range(len(stations))) - set(keep.tolist()))]
         dropped['old'] += sum(s['old'] for s in gone)
@@ -220,11 +249,12 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
     extra = {'stations_old': n_old, 'stations_added': added, 'stations_dropped': dropped,
              'stations_new_kept': sum(not s['old'] for s in stations), 'stations_total': len(stations),
              'marked_share': shares, 'marked_limit': MARKED_LIMIT, 'passes': passes,
-             'buildings_without_road': {'air_le_600m': passes[-1]['assignment']['air'] if passes else 0,
-                                        'air_gt_600m': passes[-1]['assignment']['air_far'] if passes else 0},
+             'buildings_without_road': {'air_le_600m': sum(x['assignment']['air'] for x in passes),
+                                        'air_gt_600m': sum(x['assignment']['air_far'] for x in passes),
+                                        'definition': 'bewegte Knoten ohne Straßenverbindung, Summe der Durchgänge'},
              'nodes_moved': int(sum(a != b for a, b in zip(
                  [p.stations[i]['id'] for i in ctx['st_of']], [stations[i]['id'] for i in st_of]))),
-             'rule': {'max_buildings': MAX_BUILDINGS, 'radius': 'max_feeder_m / 1,2', 'snap_m': SNAP_M,
+             'rule': {'max_cluster': MAX_CLUSTER, 'moves': 'nur Knoten markierter Abgänge', 'radius': 'max_feeder_m / 1,2', 'snap_m': SNAP_M,
                       'air_max_m': AIR_MAX_M, 'seed': SEED, 'max_passes': max_passes}}
     write_variant(src, out, stations, st_of, meta={'report': extra})
     feeders = prepare_feeders(inp, out)
