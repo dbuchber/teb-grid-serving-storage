@@ -315,3 +315,27 @@ def test_v2g_lines_feed_cap_keeps_margin(i_parent):
     seg = segment_flow(grid, sized, replace(block, v2g_kw=(out - rech).astype(np.float32)))
     pct = loading_pct(seg, sized)
     assert seg[18, 0] < 0 and pct[18, 0] <= 100.0
+
+
+def test_trafo_never_above_kva_by_rounding():
+    """Task 11: Laden/V2G füllen den Trafo-Raum genau; der Stationsfluss darf durch Rundung nicht über ``kva`` liegen
+    (sonst zählt die Trafo-Kennzahl Scheinüberlast)."""
+    rng = np.random.default_rng(11)
+    grid, sized = toy_grid((1e6,) * 4)
+    base = rng.uniform(0.0, 9.7, (H, 4)) + 1e-7 * rng.random((H, 4))
+    block = toy_block(base, hh=(0, 0, 0, 0))
+    st0 = block.net().sum(axis=1, dtype=np.float64)
+    kva = 23.456789
+    ev = rng.uniform(0.0, 11.0, (H, 4))
+    out, _ = controlled_lines(block, ev, grid, sized, kva, station_flow0=st0)
+    flow = st0 + out.sum(axis=1)
+    ok = st0 <= kva                      # Grundfluss schon über kva: dort lädt niemand, Überlast bleibt echt
+    assert out.sum(axis=1)[~ok].max() == 0.0
+    assert out.sum() > 0 and (flow[ok] > kva).sum() == 0
+    # V2G: Überlast am Trafo wird genau bis kva gedeckt, nicht knapp darüber
+    st = st0 + ev.sum(axis=1)
+    vb = replace(block, ev_kw=ev.astype(np.float32))
+    out, rech, _ = v2g_lines(vb, np.full(4, 3.0), grid, sized, kva, station_flow=st)
+    flow = st - out.sum(axis=1) + rech.sum(axis=1)
+    assert out.sum() > 0
+    assert ((flow > kva) & (flow < kva + 1e-6)).sum() == 0     # Scheinüberlast; echte Restüberlast bleibt erlaubt

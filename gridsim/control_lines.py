@@ -44,6 +44,9 @@ _EPS_KW = 1e-3   # Trafo-Überlast darunter (1 W) ist Rundung: gesteuertes Laden
 # Kennzahlen rechnen den Abschnittsfluss in float32; ohne Abstand ergäbe ein genau gefüllter Raum Rundungswerte
 # knapp über 100 % und damit Scheinüberlast, die erst die Steuerung erzeugt.
 _MARGIN = 1e-5
+# Am Trafo füllen Laden, Nachladen und V2G den Raum bis ``kva`` − 1 µW: Ohne Abstand ergibt Grundfluss + Summe der
+# Knoten durch Rundung Werte knapp über ``kva`` (< 10⁻⁶ kW), die die Trafo-Kennzahl als Überlast zählt (Task 11).
+_TRAFO_EPS_KW = 1e-9
 
 
 def limit_kw(sized):
@@ -102,8 +105,9 @@ class _Tree:
                 fac[over] = r[over] / s[over] - 1.0
                 alloc = alloc * np.maximum(1.0 + dlt @ fac, 0.0)
         tot = alloc.sum()
-        if tot > trafo_room:
-            alloc = alloc * (trafo_room / tot)
+        lim = max(trafo_room - _TRAFO_EPS_KW, 0.0)
+        if tot > lim:
+            alloc = alloc * (lim / tot)
         return alloc
 
     def cover(self, need_seg, need_trafo, avail):
@@ -121,6 +125,7 @@ class _Tree:
                 d = d + free * (dlt @ take)
         need = need_trafo - d.sum()
         if need > 0:
+            need += _TRAFO_EPS_KW
             free = avail - d
             extra = free.sum()
             if extra > 0:
