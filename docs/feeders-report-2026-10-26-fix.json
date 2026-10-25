@@ -1,14 +1,25 @@
 {
  "n_stations": 257,
  "marked": {
-  "stations_long": 215,
+  "stations_long": 107,
   "stations_sizing": 59,
-  "stations_any": 215,
-  "stations_any_share": 0.8366,
-  "feeders_long": 738,
+  "stations_any": 123,
+  "stations_any_share": 0.4786,
+  "feeders_long": 222,
   "feeders_sizing": 87,
-  "feeders_any": 754,
-  "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang) oder SizedGrid.marked (Bemessung scheitert)"
+  "feeders_any": 269,
+  "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang, ab 6 Wohngebäuden jenseits der Grenze) oder SizedGrid.marked (Bemessung scheitert); Ausläufer zählen nicht"
+ },
+ "tails": {
+  "stations": 189,
+  "feeders": 485,
+  "reach_m": {
+   "n": 485,
+   "mean": 975.51,
+   "median": 803.5,
+   "p90": 1487.7
+  },
+  "definition": "Abgang zu lang, aber weniger als 6 Wohngebäude jenseits der Grenze und Bemessung erfolgreich (StationGrid.tail); wie jeder Abgang bemessen, nicht markiert"
  },
  "cable_share": {
   "by_cable_length": 0.6789,
