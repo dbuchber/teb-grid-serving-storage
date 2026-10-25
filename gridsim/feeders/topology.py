@@ -168,16 +168,21 @@ def _root_geometry(tree, k):
 
 
 def _overhead_feeders(trunk_len, cable_share):
-    """Abgänge nach Trunklänge absteigend als Freileitung, bis Anteil ≥ 1 − cable_share."""
+    """Abgänge als Freileitung, sodass der Freileitungsanteil der Trunklänge möglichst nahe an 1 − cable_share liegt.
+
+    Abgänge nach Trunklänge absteigend; ein Abgang wird nur dann Freileitung, wenn der Anteil dadurch näher ans
+    Ziel rückt (|Anteil − Ziel| sinkt). So schießt ein langer Abgang nicht über das Ziel hinaus.
+    """
     oh = np.zeros(len(trunk_len), bool)
-    total = trunk_len.sum()
+    total = float(trunk_len.sum())
     target = (1.0 - cable_share) * total
+    if total <= 0 or target <= 0:
+        return oh
     done = 0.0
     for f in np.argsort(-trunk_len, kind='stable'):
-        if total <= 0 or done >= target:
-            break
-        oh[f] = True
-        done += trunk_len[f]
+        if abs(done + trunk_len[f] - target) < abs(done - target):
+            oh[f] = True
+            done += float(trunk_len[f])
     return oh
 
 

@@ -124,20 +124,40 @@ def test_direct_feeder_for_large_pv(roads):
     assert g.length_m[j] == pytest.approx(reach(g)[-1]) and g.length_m[j] > 200.0
 
 
-def test_overhead_share_streu():
-    rng = np.random.default_rng(3)
-    xy = rng.uniform(-600, 600, size=(12, 2)) + [600000.0, 380000.0]
-    g = build(xy, st_xy=[600000.0, 380000.0])
-    assert g.area == 'streu'
+def overhead_share(g):
     trunk = ~g.service
-    share = g.length_m[trunk & g.overhead].sum() / g.length_m[trunk].sum()
-    assert share >= 1 - AREAS['streu'].cable_share
+    return g.length_m[trunk & g.overhead].sum() / g.length_m[trunk].sum()
+
+
+@pytest.mark.parametrize('area, spacing, side', [('ort', 50.0, 15), ('streu', 120.0, 12)])
+def test_overhead_share_near_target(area, spacing, side):
+    """Freileitungsanteil liegt auf ±10 Prozentpunkte am Ziel (Station mit ≥ 5 Abgängen), ohne Überschießen."""
+    st = np.array([600000.0, 380000.0])
+    half = (side - 1) / 2 * spacing
+    grid = np.array([[x, y] for x in np.linspace(-half, half, side) for y in np.linspace(-half, half, side)])
+    g = build(grid + st + [spacing / 3, spacing / 3], st_xy=st)
+    assert g.area == area
+    assert len(g.marked) >= 5
+    target = 1 - AREAS[area].cable_share
+    assert abs(overhead_share(g) - target) <= 0.10
     assert g.overhead.any() and not g.overhead.all()
 
+
+def test_overhead_share_stadt_zero():
     grid = np.array([[x, y] for x in range(-100, 101, 20) for y in range(-100, 101, 20)], float)
     g = build(grid + [600000.0, 380000.0], st_xy=[600000.0, 380000.0])
     assert g.area == 'stadt'
     assert not g.overhead.any()
+
+
+def test_overhead_feeders_closer_rule():
+    """Ein Abgang kommt nur dazu, wenn der Anteil dadurch näher ans Ziel rückt."""
+    from gridsim.feeders.topology import _overhead_feeders
+    # Ziel 20 % von 1000 m = 200 m: 600 m würde überschießen (|600−200| > 200), 150 + 50 trifft genau
+    oh = _overhead_feeders(np.array([600.0, 150.0, 100.0, 50.0, 100.0]), 0.8)
+    assert oh.tolist() == [False, True, False, True, False]
+    assert not _overhead_feeders(np.array([300.0, 200.0]), 1.0).any()
+    assert not _overhead_feeders(np.zeros(3), 0.5).any()
 
 
 @pytest.mark.parametrize('far_station', [False, True])
