@@ -8,7 +8,7 @@ from gridsim.feeders.sizing import DesignRule, design_flows, g, p_ev, size
 from gridsim.feeders.topology import StationGrid
 
 
-def make_grid(parent, length, service, feeder, ends, overhead=None, area='stadt'):
+def make_grid(parent, length, service, feeder, ends, overhead=None, area='streu'):
     """Handgebautes StationGrid; ``ends[i]`` = Endabschnitt des Knotens i (Pfad = Kette der Eltern)."""
     parent = np.asarray(parent, np.int32)
     m, n = len(parent), len(ends)
@@ -182,3 +182,22 @@ def test_halls_only_station():
     assert s.types[0] == 'NAYY 4x240'                                # 289 A Einspeisung > 275 A (4x150)
     assert s.types[1] == 'NAYY 4x50'
     assert np.isfinite(s.du_load_pct).all() and (s.du_load_pct == 0).all()
+
+
+@pytest.mark.parametrize('area', ['stadt', 'ort'])
+def test_minimum_trunk_section_in_stadt_and_ort(area):
+    """Fix-Runde 2: Strang in stadt/ort mindestens NAYY 4x150 bzw. Al 4x95, auch bei kleiner Last; Hausanschlüsse
+    bleiben NAYY 4x35 / Al 4x25; streu unverändert ab NAYY 4x50 / Al 4x70."""
+    # Kabelstrang 0 mit Hausanschluss 1, Freileitungsstrang 2 mit Hausanschluss 3; je 5 kW Bezug
+    gr = make_grid([-1, 0, -1, 2], [50, 10, 50, 10], [False, True, False, True], [0, 0, 1, 1], [1, 3],
+                   overhead=[False, False, True, True], area=area)
+    s = size(gr, np.full(4, 5.0), np.zeros(4))
+    assert s.types == ['NAYY 4x150', 'NAYY 4x35', 'Al 4x95', 'Al 4x25']
+    gr_streu = make_grid([-1, 0, -1, 2], [50, 10, 50, 10], [False, True, False, True], [0, 0, 1, 1], [1, 3],
+                         overhead=[False, False, True, True], area='streu')
+    assert size(gr_streu, np.full(4, 5.0), np.zeros(4)).types == ['NAYY 4x50', 'NAYY 4x35', 'Al 4x70', 'Al 4x25']
+
+
+def test_minimum_section_still_upgrades_for_load():
+    gr = make_grid([-1], [50], [False], [0], [0], area='stadt')
+    assert size(gr, np.array([190.0]), np.zeros(1)).types == ['NAYY 4x240']   # 190 kW > 4x150 (≈185 kW)

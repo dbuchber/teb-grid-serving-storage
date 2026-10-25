@@ -16,7 +16,13 @@ DAYS = HOURS // 24
 DEADLINE_H = 7  # Ladeende spätestens am Folgetag 7 Uhr (gesteuertes Laden, WiNAP)
 # Szenarien der eingefrorenen Skripte plus ein mittleres 2040: Wärmepumpen wie 2030 (35 %), E-Autos wie 2040.
 # 2040 (70 %) ist der Stressfall für Klimaneutralität; 35 % liegt näher an UBA-WAM und TU-Wien-Szenarien.
-SCENARIOS = {**wpev.SCENARIOS, '2040m': {'wp_share': 0.35, 'ev_share': 0.60}}
+# heute aus dem Ist-Abgleich (Owner, Fix-Runde 2, 25.10.2026; Quellen in docs/gridsim-leitungen-abnahme.md):
+# E-Autos 0,076 je Haushalt = Elektro-Pkw OÖ 51 343 (31.12.2025) / 672 647 Privathaushalte OÖ 2025;
+# Wärmepumpen: OÖ 2023/24 21,4 % der Hauptwohnsitze („Solar, Wärmepumpen“ 142 397 von 666 900). Im Modell zieht
+# assign je Wohngebäude; wp_share 0,23 ergibt 21,4 % der Haushalte (Steyr: weniger Fernwärme, mehr Haushalte in
+# Mehrfamilienhäusern). Die eingefrorenen Werte in legacy (0,15 / 0,08) bleiben unverändert.
+SCENARIOS = {**wpev.SCENARIOS, 'heute': {'wp_share': 0.23, 'ev_share': 0.076},
+             '2040m': {'wp_share': 0.35, 'ev_share': 0.60}}
 
 
 @dataclass

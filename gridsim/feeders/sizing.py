@@ -1,6 +1,6 @@
 """Querschnittswahl nach Planungsregel (Spec 4.3): Grenzstrom und Spannungsfall im Auslegungsfall „heute“.
 
-Hausanschlüsse sind fest (``SERVICE``). Jeder Trunk-Abschnitt bekommt zuerst den kleinsten Typ der Liste (Kabel
+Hausanschlüsse sind fest (``SERVICE``). Jeder Trunk-Abschnitt bekommt zuerst den kleinsten Typ der Liste ab ``MIN_TRUNK`` (Kabel
 oder Freileitung nach ``overhead``), der den Auslegungsstrom trägt. Danach wird je Abgang der Spannungsfall vom
 Trafo bis zum entferntesten Knoten geprüft (Σ (R·P + X·Q) / U² auf dem Pfad, Bezug ≤ 5 %, Einspeisung ≤ 3 %); bei
 Verletzung wird der Abschnitt des schlechtesten Pfads mit dem größten Beitrag eine Typstufe hochgesetzt, über dem
@@ -25,6 +25,9 @@ DU_LOAD_MAX_PCT = 5.0           # Planungsgrenze Spannungsfall bei Bezug
 DU_FEED_MAX_PCT = 3.0           # Planungsgrenze Spannungsanhebung bei Einspeisung
 I_LIMIT = 1.0                   # Anteil des thermischen Grenzstroms
 MAX_PARALLEL = 2
+# Fix-Runde 2 (Owner „Ist-Abgleich“, 25.10.2026): Mindestquerschnitt im Strang nach üblicher Praxis, nicht aus
+# Steyr-Daten belegt. stadt/ort: Kabel mindestens NAYY 4x150, Freileitung mindestens Al 4x95; streu unverändert.
+MIN_TRUNK = {'stadt': {False: 'NAYY 4x150', True: 'Al 4x95'}, 'ort': {False: 'NAYY 4x150', True: 'Al 4x95'}}
 
 
 def g(n: np.ndarray) -> np.ndarray:
@@ -145,9 +148,12 @@ def size(grid: StationGrid, p_load, p_feed) -> SizedGrid:
     step = np.full(m, -1, int)
     parallel = np.ones(m, int)
     cur = _current_a(p_load, p_feed)
+    min_name = MIN_TRUNK.get(grid.area, {})
     for j in np.flatnonzero(trunk):
         lst = lists[j]
-        ok = [k for k, t in enumerate(lst) if t.i_max_a * I_LIMIT >= cur[j]]
+        names = [t.name for t in lst]
+        lo = names.index(min_name[bool(grid.overhead[j])]) if bool(grid.overhead[j]) in min_name else 0
+        ok = [k for k, t in enumerate(lst) if k >= lo and t.i_max_a * I_LIMIT >= cur[j]]
         if ok:
             step[j] = ok[0]
         else:
