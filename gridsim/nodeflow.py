@@ -6,7 +6,8 @@ sondern je Aufruf (8760, n_s) je Bestandteil.
 
 - Wärmepumpe: ``profiles.heat_pump_kw`` mit denselben ``limits/shifts`` (``wpev.spread(N, seed)``) wie
   ``profiles.heat_pump``; die Formel rechnet spaltenweise, daher gleiche Werte je Knoten.
-- Speicher: Wirkung je Speicherknoten aus ``f['storage_delta']``.
+- Speicher: Wirkung je Speicherknoten aus ``f['storage_delta']``, dazu ein Netzspeicher (``f['ns_kw']`` am Knoten
+  ``f['ns_idx']``, run.flows) am selben Knoten.
 - E-Auto ungesteuert/WiNAP/T3d: Ereignisse der Station mit lokalem Knotenindex gerendert.
 - Gesteuert/V2G (Grenzmodus ``trafo``): je Stunde bekommt jeder Knoten den Anteil served/want der Station an
   seinem Bedarf (eigene ungesteuerte Last + eigener Rückstau); der Rückstau je Knoten verfällt wie in
@@ -31,7 +32,7 @@ class NodeBlock:
     hh_kw: np.ndarray
     pv_kw: np.ndarray
     wp_kw: np.ndarray
-    storage_kw: np.ndarray   # Wirkung des Heimspeichers, + = Bezug (Laden), − = Entladen
+    storage_kw: np.ndarray   # Wirkung von Heim- und Netzspeicher, + = Bezug (Laden), − = Entladen
     ev_kw: np.ndarray
     v2g_kw: np.ndarray       # netto: + = Rückspeisung, − = Nachladen
     nodes: np.ndarray        # (n_s,) globale Knotenindizes
@@ -113,6 +114,10 @@ def base_block(p, params, f, s: int) -> NodeBlock:
     sel = np.flatnonzero(st[sidx] == s) if len(sidx) else np.zeros(0, int)
     if len(sel):
         storage_kw[:, np.searchsorted(nodes, sidx[sel])] = f['storage_delta'][:, sel]
+    ns_idx = f.get('ns_idx')
+    if ns_idx is not None and len(ns_idx):           # Netzspeicher (run.flows) an seinem Knoten dazu
+        for c in np.flatnonzero(st[np.asarray(ns_idx)] == s):
+            storage_kw[:, np.searchsorted(nodes, ns_idx[c])] += f['ns_kw'][:, c]
     zero = np.zeros((HOURS, len(nodes)), dtype=np.float32)
     return NodeBlock(hh_kw=hh_kw, pv_kw=pv_kw, wp_kw=wp_kw, storage_kw=storage_kw, ev_kw=zero, v2g_kw=zero.copy(),
                      nodes=nodes, hh=hh, hh_peak_kw=float(h0.max()))

@@ -5,13 +5,13 @@ import os
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 
-from gridsim import control, control_lines, legacy, metrics, profiles
+from gridsim import control, control_lines, legacy, metrics, netzspeicher, profiles
 from gridsim.data import load_prepared
 from gridsim.feeders.loading import loading_pct, segment_flow
 from gridsim.feeders.prepare import load_feeders
@@ -36,8 +36,9 @@ class RunParams:
     ``limits``: Grenzmodus der Steuerung (Spec 4.5), ``'trafo'`` = bisheriges Verhalten (Trafo-Kennzahlen
     bitgleich), ``'trafo+leitung'`` = gesteuertes Laden, V2G und T3d auch gegen Abschnittsgrenzen
     (control_lines.py; ohne Stationsnetze wie ``'trafo'``, vermerkt in ``extra['limits_effective']``).
-    ``netzspeicher``: Netzspeicher am Leitungsengpass (Spec 4.6) an/aus; Verhalten kommt mit Task 9, bis dahin
-    rechnet er wie der Default.
+    ``netzspeicher``: Netzspeicher am Leitungsengpass (Spec 4.6, netzspeicher.py) an/aus; Ort und Größe aus dem
+    Auslegungslauf (``netzspeicher_plan``), ohne Stationsnetze wie aus (vermerkt in
+    ``extra['netzspeicher_effective']``).
     """
     weather_year: int = 2023
     scenario: str = '2030'
@@ -84,13 +85,22 @@ def seed_of(i):
     return BASE_SEED + 1000 * i
 
 
-def flows(p, params, i, feeders=None):
+FIXED_START = ('uncontrolled', 'winap', 't3d')   # Ladezeiten stehen vor dem Netzspeicher fest
+
+
+def flows(p, params, i, feeders=None, plan=None):
     """Zwischenschritte eines Seeds: Fluss ohne E-Auto, E-Auto-Last, Endfluss je Station, ungeladene Energie.
 
     ``storage_delta``/``storage_idx``: Wirkung der Heimspeicher je Speicherknoten, ``seed``: Seed des Laufs; beides
     für Knotenflüsse (nodeflow.py). ``feeders``: Stationsnetze für den Grenzmodus ``'trafo+leitung'``; dann stehen
     die Knotenentscheidungen von gesteuertem Laden/V2G in ``node_decisions``. ``limits_effective``: tatsächlich
     gerechneter Grenzmodus (``'trafo'``, wenn Netze fehlen).
+
+    Netzspeicher (``params.netzspeicher``, ``plan`` aus ``netzspeicher_plan``, braucht ``feeders``): Reihenfolge
+    Grundfluss (Haushalt, PV, Wärmepumpe, Heimspeicher) → Netzspeicher → E-Auto-Steuerung. Der Netzspeicher sieht
+    dazu die E-Auto-Last, deren Startzeiten schon feststehen (ungesteuert, WiNAP, T3d; das T3d-Signal kommt daher
+    ohne Netzspeicher zustande); gesteuertes Laden und V2G reagieren auf ihn. Seine Leistung steht in ``ns_kw``
+    (8760, k) an den globalen Knoten ``ns_idx`` und ist in ``base`` und ``flow`` enthalten.
     """
     seed = seed_of(i)
     rng = np.random.default_rng(seed)
@@ -111,6 +121,16 @@ def flows(p, params, i, feeders=None):
     else:
         start = control.start_uncontrolled(ev)
     ev_load = control.render(ev, start, s)
+    ns_on = bool(params.netzspeicher and feeders is not None)
+    ns_kw, ns_idx = None, None
+    if ns_on and plan:
+        fixed = params.charging in FIXED_START
+        ns_kw, ns_idx = netzspeicher.apply(p, params, part, plan, feeders, ev, start if fixed else None)
+        base = np.asarray(base, dtype=float).copy()
+        node_st = np.asarray(p.nodes_station)
+        for c, g in enumerate(ns_idx):
+            base[:, node_st[g]] += ns_kw[:, c]
+        part['ns_kw'], part['ns_idx'] = ns_kw, ns_idx
     unmet, v2g, decisions = None, np.zeros_like(ev_load), None
     if params.charging in ('controlled', 'v2g') and lines:
         ev_load, v2g, unmet, decisions = control_lines.apply(p, params, part, ev, start, base, feeders)
@@ -125,7 +145,8 @@ def flows(p, params, i, feeders=None):
     return {'heat': heat, 'cars': cars, 'wp_station': wp_st, 'ev': ev, 'start': start, 'base': base,
             'ev_load': ev_load, 'v2g': v2g, 'flow': flow, 'unmet': unmet,
             'storage_delta': storage_delta, 'storage_idx': storage_idx, 'seed': seed, 'node_decisions': decisions,
-            'limits_effective': 'trafo+leitung' if lines else 'trafo'}
+            'limits_effective': 'trafo+leitung' if lines else 'trafo',
+            'ns_kw': ns_kw, 'ns_idx': ns_idx, 'netzspeicher_effective': ns_on}
 
 
 NO_FEEDERS = 'none'
@@ -204,28 +225,69 @@ def _line_results(p, f, kpis):
     return extra, metrics.line_region_kpis(kpis, first_load, first_feed)
 
 
+def netzspeicher_plan(p, params, feeders):
+    """Auslegungslauf der Netzspeicher: Seed 0 derselben Einstellung ohne Netzspeicher, je Station mit Netz Ort und
+    Größe aus dessen Abschnittsflüssen (``netzspeicher.plan_station``); Liste nach Station sortiert."""
+    p0 = replace(params, netzspeicher=False)
+    f = flows(p, p0, 0, feeders=feeders)
+    plan = []
+    for s in sorted(feeders):
+        grid, sized = feeders[s]
+        plan += netzspeicher.plan_station(s, grid, sized, segment_flow(grid, sized, station_block(p, p0, f, s)))
+    return plan
+
+
+def _plan_path(cache_dir, params):
+    return Path(cache_dir) / params.key() / 'netzspeicher.json'
+
+
+def netzspeicher_plan_cached(cache_dir, params, feeders_fp, compute):
+    """Plan aus ``<cache_dir>/<key>/netzspeicher.json``, wenn mit denselben Stationsnetzen (``feeders_fp``)
+    bemessen; sonst ``compute()`` und speichern (atomar)."""
+    path = _plan_path(cache_dir, params)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+            if data.get('feeders_fp') == feeders_fp:
+                return data['storages']
+        except (ValueError, KeyError, AttributeError):   # abgebrochen geschrieben: neu bemessen
+            pass
+    plan = compute()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f'.{os.getpid()}.tmp')
+    tmp.write_text(json.dumps({'feeders_fp': feeders_fp, 'model_version': MODEL_VERSION, 'storages': plan},
+                              indent=1))
+    os.replace(tmp, path)
+    return plan
+
+
 _FROM_ROOT = object()
 
 
-def run_seed(p, params, i, feeders=_FROM_ROOT, feeders_fp=None):
+def run_seed(p, params, i, feeders=_FROM_ROOT, feeders_fp=None, plan=None):
     """Ein Seed: Trafo-Kennzahlen wie bisher, dazu Leitungskennzahlen, wenn es Stationsnetze gibt.
 
     ``feeders``: Ergebnis von ``load_feeders`` (None = ohne Leitungen) mit ``feeders_fp`` als Fingerabdruck;
-    ohne Angabe beides aus ``p.root/feeders/``.
+    ohne Angabe beides aus ``p.root/feeders/``. ``plan``: Netzspeicher aus ``netzspeicher_plan``; fehlt er bei
+    ``params.netzspeicher``, wird er hier (im Speicher) bemessen.
     """
     t = time.perf_counter()
     if feeders is _FROM_ROOT:
         feeders_fp, feeders = feeders_state(p.root)
     elif feeders is None and feeders_fp is None:
         feeders_fp = NO_FEEDERS
-    f = flows(p, params, i, feeders=feeders)
+    if params.netzspeicher and feeders is not None and plan is None:
+        plan = netzspeicher_plan(p, params, feeders)
+    f = flows(p, params, i, feeders=feeders, plan=plan)
     flow, kva = f['flow'], p.kva
     rows_load = metrics.station_rows(flow, kva, None)
     rows_feed = metrics.station_rows(-flow, kva, None)
     region = metrics.region_kpis(rows_load, rows_feed, f['unmet'], p.n_stations)
     extra, line_region = _line_results(p, f, None if feeders is None else line_kpis(p, params, f, feeders))
     region.update(line_region)
+    region.update(_netzspeicher_region(f, plan, line_region))
     extra['limits_effective'] = f['limits_effective']
+    extra['netzspeicher_effective'] = f['netzspeicher_effective']
     daily_max = flow[:flow.shape[0] // 24 * 24].reshape(-1, 24, flow.shape[1]).max(axis=1)
     return SeedResult(index=i, seed=seed_of(i), region=region,
                       station_load_kw_max=[round(float(x), 1) for x in flow.max(axis=0)],
@@ -233,6 +295,15 @@ def run_seed(p, params, i, feeders=_FROM_ROOT, feeders_fp=None):
                       station_feed_h=[r['engpass_h_jahr'] if r else 0 for r in rows_feed],
                       worst_day=[int(x) for x in daily_max.argmax(axis=0)],
                       runtime_s=round(time.perf_counter() - t, 2), extra=extra, feeders_fp=feeders_fp)
+
+
+def _netzspeicher_region(f, plan, line_region):
+    """Regionskennzahlen der Netzspeicher; None, wenn ohne Netzspeicher gerechnet."""
+    if not f['netzspeicher_effective']:
+        return metrics.netzspeicher_region_kpis(None, 0.0, None)
+    ns_kw = f['ns_kw']
+    out_kwh = 0.0 if ns_kw is None else float(np.maximum(-np.asarray(ns_kw, float), 0.0).sum()) / netzspeicher.ETA
+    return metrics.netzspeicher_region_kpis(plan or [], out_kwh, line_region.get('line_over_m'))
 
 
 def code_version():
@@ -285,12 +356,16 @@ def _init(root, year):
     _WORKER['feeders_fp'], _WORKER['feeders'] = feeders_state(root)   # einmal je Prozess, nicht je Seed
 
 
-def _work(params, i):
-    return run_seed(_WORKER['p'], params, i, feeders=_WORKER['feeders'], feeders_fp=_WORKER['feeders_fp'])
+def _work(params, i, plan=None):
+    return run_seed(_WORKER['p'], params, i, feeders=_WORKER['feeders'], feeders_fp=_WORKER['feeders_fp'], plan=plan)
 
 
 def run_many(root, params, workers=4, cache_dir=None):
-    """Alle Seeds der Einstellung, in Fertigstellungsreihenfolge; Gecachtes (gleicher Netzstand) zuerst."""
+    """Alle Seeds der Einstellung, in Fertigstellungsreihenfolge; Gecachtes (gleicher Netzstand) zuerst.
+
+    Netzspeicher: Plan einmal im Hauptprozess (``netzspeicher_plan``, mit ``cache_dir`` über
+    ``netzspeicher_plan_cached``) und an alle Seeds weitergegeben.
+    """
     params.validate()
     t = time.perf_counter()
     fp = feeders_fingerprint(root)
@@ -300,9 +375,14 @@ def run_many(root, params, workers=4, cache_dir=None):
     if todo:
         if cache_dir:
             (Path(cache_dir) / params.key()).mkdir(parents=True, exist_ok=True)
+        plan = None
+        if params.netzspeicher and fp != NO_FEEDERS:
+            def compute():
+                return netzspeicher_plan(load_prepared(root, params.weather_year), params, feeders_state(root)[1])
+            plan = netzspeicher_plan_cached(cache_dir, params, fp, compute) if cache_dir else compute()
         with ProcessPoolExecutor(max_workers=max(1, min(workers, len(todo))), initializer=_init,
                                  initargs=(str(root), params.weather_year)) as pool:
-            futures = [pool.submit(_work, params, i) for i in todo]
+            futures = [pool.submit(_work, params, i, plan) for i in todo]
             for fut in as_completed(futures):
                 r = fut.result()
                 if cache_dir:

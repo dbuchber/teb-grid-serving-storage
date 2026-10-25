@@ -198,7 +198,7 @@ def v2g_lines(block, cars_node, grid, sized, kva, station_flow=None):
         if w != window:
             left, window = e_cap.copy(), w
         d = tree.cover(over_seg[h], over_tr[h], np.minimum(p_cap, left))
-        d = tree.cap(d, np.maximum(seg[h] + feed_kw, 0.0), max(st[h] + kva, 0.0))
+        d = tree.cap(d, np.maximum(seg[h] + feed_kw * (1.0 - _MARGIN), 0.0), max(st[h] + kva, 0.0))
         out[h] = d
         left = left - d
 

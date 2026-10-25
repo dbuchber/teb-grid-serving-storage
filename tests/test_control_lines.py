@@ -299,3 +299,19 @@ def test_run_seed_records_limits_effective(run_case):
     assert r.extra['limits_effective'] == 'trafo+leitung'
     r0 = run_seed(p, lp(limits='trafo+leitung'), 0, feeders=None)
     assert r0.extra['limits_effective'] == 'trafo'
+
+
+@pytest.mark.parametrize('i_parent', [47.7, 123.0])   # Werte, bei denen ohne Abstand 100,00001 % herauskamen
+def test_v2g_lines_feed_cap_keeps_margin(i_parent):
+    """Task-8-Review: Rückspeisung an Kind-Abschnitt darf den Eltern-Abschnitt (PV-Einspeisung) nicht über 100 % drücken."""
+    grid, sized = toy_grid((i_parent, 15.0, 60.0, 40.0))
+    load_kw, feed_kw = limit_kw(sized)
+    base = np.zeros((H, 4))
+    base[18, 1] = load_kw[1] + 5.0                        # Kind-Abschnitt 1 in Bezugsrichtung überlastet
+    base[18, 0] = -feed_kw[0] - base[18, 1] + 2.0         # PV an Knoten 0: Eltern-Abschnitt 0 knapp unter der Grenze
+    block = toy_block(base, hh=(0, 0, 0, 0))
+    out, rech, _ = v2g_lines(block, np.array([0, 3.0, 0, 0]), grid, sized, 1000.0)
+    assert out[18, 1] > 1.0                               # V2G greift, wird aber am Eltern-Abschnitt gekappt
+    seg = segment_flow(grid, sized, replace(block, v2g_kw=(out - rech).astype(np.float32)))
+    pct = loading_pct(seg, sized)
+    assert seg[18, 0] < 0 and pct[18, 0] <= 100.0

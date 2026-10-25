@@ -35,6 +35,8 @@ def events(over):
 
 
 def trafo_steps(kva, peak):
+    if kva not in TRAFO_SIZES:   # Grenze ist keine Trafogröße (Abschnitt beim Netzspeicher): keine Stufen
+        return None
     need = next((t for t in TRAFO_SIZES if t >= peak), None)
     return None if need is None else TRAFO_SIZES.index(need) - TRAFO_SIZES.index(kva)
 
@@ -161,6 +163,25 @@ def line_region_kpis(kpis, first_load, first_feed):
     }
 
 
+NETZSPEICHER_REGION_KEYS = ('netzspeicher_n', 'netzspeicher_kwh', 'netzspeicher_kw', 'netzspeicher_vollzyklen',
+                            'line_over_m_rest')
+
+
+def netzspeicher_region_kpis(plan, discharged_kwh, line_over_m):
+    """Regionskennzahlen der Netzspeicher (Spec 4.6) aus dem Plan (Liste mit ``kwh``/``kw``, None = ohne).
+
+    Vollzyklen = entnommene Energie (Ladezustand, kWh) / Summe der Kapazitäten; ``line_over_m_rest`` = Länge der
+    trotz Netzspeicher überlasteten Abschnitte (= ``line_over_m`` dieses Laufs).
+    """
+    if plan is None:
+        return dict.fromkeys(NETZSPEICHER_REGION_KEYS)
+    kwh = sum(st['kwh'] for st in plan)
+    return {'netzspeicher_n': len(plan), 'netzspeicher_kwh': round(kwh, 1),
+            'netzspeicher_kw': round(sum(st['kw'] for st in plan), 1),
+            'netzspeicher_vollzyklen': round(discharged_kwh / kwh, 1) if kwh > 0 else 0.0,
+            'line_over_m_rest': line_over_m}
+
+
 def costs(kpis, params):
     """Kosten aus Median-Kennzahlen; Platzhalter (None) werden nicht gerechnet, sondern gemeldet."""
     placeholders = [k for k, v in params.items() if v is None]
@@ -171,8 +192,13 @@ def costs(kpis, params):
     line = None
     if params.get('line_eur_per_m') is not None and kpis.get('line_over_m') is not None:
         line = kpis['line_over_m'] * params['line_eur_per_m']
-    return {'storage_eur': storage, 'trafo_eur': trafo, 'line_eur': line,
+    ns = None
+    if kpis.get('netzspeicher_kwh') is not None:
+        ns = kpis['netzspeicher_kwh'] * params['storage_eur_per_kwh']
+    return {'storage_eur': storage, 'trafo_eur': trafo, 'line_eur': line, 'netzspeicher_eur': ns,
             'trafo_over_1000': kpis['trafo_over_1000'], 'placeholders': placeholders,
             'note': 'Model values. Line reinforcement = length of LV segments above 100 % of rated current '
                     '(synthetic LV grid, thermal only) × cost per metre; None without a cost rate or without a grid. '
-                    'trafo_plus2 counts as two steps; stations above 1000 kVA need a new MV connection (not priced).'}
+                    'trafo_plus2 counts as two steps; stations above 1000 kVA need a new MV connection (not priced). '
+                    'Grid storage (netzspeicher_eur) = installed kWh of the operator storages at line bottlenecks × '
+                    'storage cost per kWh; None without grid storage.'}
