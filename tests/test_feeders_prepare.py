@@ -74,7 +74,7 @@ def test_station_file_roundtrip_exact(setup, tmp_path):
     assert (g2.station, g2.area) == (grid.station, grid.area)
     assert all(np.array_equal(x, y) for x, y in zip(grid.geometry, g2.geometry))
     assert s2.types == sized.types
-    for f in ('parallel', 'i_max_a', 'r_ohm', 'x_ohm', 'du_load_pct', 'du_feed_pct', 'marked'):
+    for f in ('parallel', 'i_max_a', 'r_ohm', 'x_ohm', 'du_load_pct', 'du_feed_pct', 'marked', 'marked_voltage'):
         a, b = getattr(sized, f), getattr(s2, f)
         assert a.dtype == b.dtype and np.array_equal(a, b), f
 
@@ -167,3 +167,33 @@ def test_station_summary_skips_feeders_without_nodes():
                       marked=np.zeros(2, bool))
     s = _station_summary(grid, sized)
     assert s['reach_m'] == [110.0]
+
+
+
+def test_report_counts_voltage_only_separately():
+    """Fix-Runde 4: reine Spannungsfälle stehen getrennt im Bericht (Abgänge, Stationen, Gebietstyp) und zählen
+    nicht in ``marked.stations_any``."""
+    from dataclasses import replace
+    from scipy import sparse
+    from gridsim.feeders.prepare import _report, _station_summary
+    pts = np.array([[0.0, 0.0], [100.0, 0.0]])
+
+    def grid(area):
+        return StationGrid(station=0, area=area, node_index=np.array([0, 1]), parent=np.array([-1, -1], np.int32),
+                           length_m=np.array([100.0, 50.0], np.float32), feeder=np.array([0, 1], np.int16),
+                           service=np.zeros(2, bool), overhead=np.zeros(2, bool),
+                           downstream=sparse.csr_matrix(np.eye(2, dtype=np.int8)), marked=np.zeros(2, bool),
+                           geometry=[pts, pts])
+    sized = SizedGrid(types=['NAYY 4x240'] * 2, parallel=np.ones(2, np.int8), i_max_a=np.ones(2), r_ohm=np.zeros(2),
+                      x_ohm=np.zeros(2), du_load_pct=np.zeros(2), du_feed_pct=np.zeros(2), marked=np.zeros(2, bool),
+                      marked_voltage=np.zeros(2, bool))
+    volt = replace(sized, marked_voltage=np.array([True, True]))
+    therm = replace(sized, marked=np.array([True, False]))
+    grids = {0: (grid('streu'), volt), 1: (grid('ort'), therm), 2: (grid('ort'), sized)}
+    summ = {s: _station_summary(g, z, 2) for s, (g, z) in grids.items()}
+    assert summ[0]['marked_voltage'] == 2 and summ[0]['marked'] == 0
+    rep = _report(summ, grids)
+    assert rep['marked']['stations_any'] == 1 and rep['marked']['stations_any_share'] == round(1 / 3, 4)
+    v = rep['voltage_only']
+    assert v['feeders'] == 2 and v['stations'] == 1 and v['stations_share'] == round(1 / 3, 4)
+    assert v['stations_by_area'] == {'stadt': 0, 'ort': 0, 'streu': 1}

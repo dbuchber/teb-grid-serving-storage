@@ -144,16 +144,23 @@ def test_size_parallel_after_largest_type():
     assert s.i_max_a[0] == 2 * 313
 
 
-def test_size_marks_impossible():
+def test_size_voltage_only_failure_has_own_flag():
+    """Fix-Runde 4: 200 kW über 2 000 m trägt 2 × 4x240 thermisch, hält aber 5 % nicht → nur ``marked_voltage``."""
     s = size(one_section(2000), np.array([200.0]), np.array([0.0]))
-    assert s.marked.tolist() == [True]
+    assert s.marked.tolist() == [False] and s.marked_voltage.tolist() == [True]
     assert s.types == ['NAYY 4x240'] and s.parallel[0] == 2
+
+
+def test_size_current_failure_still_marked():
+    """Strom über 2 × 4x240 (≈ 421 kW Bezug): markiert (zählt), nicht als reiner Spannungsfall."""
+    s = size(one_section(50), np.array([500.0]), np.array([0.0]))
+    assert s.marked.tolist() == [True] and s.marked_voltage.tolist() == [False]
 
 
 def test_size_marks_only_failing_feeder():
     gr = make_grid([-1, -1], [50, 2000], [False, False], [0, 1], [0, 1])
     s = size(gr, np.array([60.0, 200.0]), np.array([0.0, 0.0]))
-    assert s.marked.tolist() == [False, True]
+    assert s.marked_voltage.tolist() == [False, True] and not s.marked.any()
     assert gr.marked.tolist() == [False, False]                      # Topologie-Markierung unberührt
 
 

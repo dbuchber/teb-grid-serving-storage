@@ -351,3 +351,24 @@ def test_cli_extra_stations(setup, capsys):
     main(['prepare-feeders', '--input', str(inp), '--prepared', str(prepared), '--extra-stations', '--out', str(out)])
     assert (out / 'feeders' / 'report.json').exists() and not (prepared / 'feeders').exists()
     assert 'extra_stations' in capsys.readouterr().out
+
+
+
+def test_voltage_only_feeders_do_not_count_toward_marked_share():
+    """Fix-Runde 4: Abgänge, die nur am Spannungsfall scheitern, zählen nicht zur 10-%-Grenze und lösen keine
+    Zusatzstation aus; zu lange Abgänge und Stromüberschreitung zählen weiter."""
+    from dataclasses import replace
+    from gridsim.feeders.extra_stations import _marked_local
+    from gridsim.feeders.sizing import SizedGrid
+    from test_feeders_sizing import make_grid
+    grid = make_grid([-1, -1], [50, 80], [False, False], [0, 1], [0, 1])
+    nf = len(grid.marked)
+    base = SizedGrid(types=['NAYY 4x50'] * len(grid.parent), parallel=np.ones(len(grid.parent), np.int8),
+                     i_max_a=np.ones(len(grid.parent)), r_ohm=np.zeros(len(grid.parent)), x_ohm=np.zeros(len(grid.parent)),
+                     du_load_pct=np.zeros(nf), du_feed_pct=np.zeros(nf), marked=np.zeros(nf, bool),
+                     marked_voltage=np.zeros(nf, bool))
+    volt = replace(base, marked_voltage=np.ones(nf, bool))
+    assert marked_share({0: (grid, volt)}) == 0.0 and len(_marked_local(grid, volt)) == 0
+    assert marked_share({0: (grid, replace(base, marked=np.ones(nf, bool)))}) == 1.0
+    long = replace(grid, marked=np.ones(nf, bool))
+    assert marked_share({0: (long, volt)}) == 1.0

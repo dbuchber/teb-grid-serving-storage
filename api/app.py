@@ -96,7 +96,8 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
         for s in prep(weather_year).stations:
             f = None if index is None else index.get(str(s['idx']))
             out.append({**{k: s[k] for k in ('id', 'idx', 'kva', 'n_hh', 'uw', 'synthetic', 'lon', 'lat')},
-                        'area': f and f['area'], 'marked': f and f['marked']})
+                        'area': f and f['area'], 'marked': f and f['marked'],
+                        'marked_voltage': f and f.get('marked_voltage')})
         return out
 
     @r.get('/lines')

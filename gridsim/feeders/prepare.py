@@ -174,7 +174,14 @@ def _save_station(path, grid: StationGrid, sized: SizedGrid, p_load=None, p_feed
         ds_shape=np.array(ds.shape, dtype=np.int64), geom_coords=coords, geom_offsets=np.concatenate([[0], np.cumsum(lens)]),
         types=np.array(sized.types, dtype=str), parallel=sized.parallel, i_max_a=sized.i_max_a, r_ohm=sized.r_ohm,
         x_ohm=sized.x_ohm, du_load_pct=sized.du_load_pct, du_feed_pct=sized.du_feed_pct, sized_marked=sized.marked,
+        sized_marked_voltage=_voltage(sized),
         **extra)
+
+
+def _voltage(sized):
+    """``SizedGrid.marked_voltage`` als bool-Array (ältere Objekte ohne Feld: keine reinen Spannungsfälle)."""
+    v = getattr(sized, 'marked_voltage', None)
+    return np.zeros(len(sized.marked), bool) if v is None else np.asarray(v, bool)
 
 
 def _load_station(path):
@@ -189,7 +196,9 @@ def _load_station(path):
                        tail=z['tail'] if 'tail' in z.files else None)
     sized = SizedGrid(types=[str(t) for t in z['types']], parallel=z['parallel'], i_max_a=z['i_max_a'],
                       r_ohm=z['r_ohm'], x_ohm=z['x_ohm'], du_load_pct=z['du_load_pct'],
-                      du_feed_pct=z['du_feed_pct'], marked=z['sized_marked'])
+                      du_feed_pct=z['du_feed_pct'], marked=z['sized_marked'],
+                      marked_voltage=(z['sized_marked_voltage'] if 'sized_marked_voltage' in z.files
+                                      else np.zeros(len(z['sized_marked']), bool)))
     return grid, sized
 
 
@@ -251,6 +260,7 @@ def _station_summary(grid, sized, n_buildings=None):
         'n_buildings': None if n_buildings is None else int(n_buildings),
         'marked_long': int(grid.marked.sum()), 'marked_sizing': int(sized.marked.sum()),
         'marked': int((grid.marked | sized.marked).sum()),
+        'marked_voltage': int((_voltage(sized) & ~grid.marked & ~sized.marked).sum()),
         'tail': int((grid.tail & ~sized.marked).sum()),
         'trunk_m': round(float(sys_len[trunk].sum()), 1),
         'overhead_m': round(float(sys_len[trunk & grid.overhead].sum()), 1),
@@ -297,6 +307,7 @@ def _report(summaries, grids):
     st_long = sum(x['marked_long'] > 0 for x in s)
     st_size = sum(x['marked_sizing'] > 0 for x in s)
     st_any = sum(x['marked'] > 0 for x in s)
+    st_volt = [x for x in s if x.get('marked_voltage', 0) > 0]
     km_type = {}
     for g, z in grids.values():
         for t, ln, par, svc_flag in zip(z.types, g.length_m, z.parallel, g.service):
@@ -316,7 +327,14 @@ def _report(summaries, grids):
                    'feeders_sizing': sum(x['marked_sizing'] for x in s), 'feeders_any': sum(x['marked'] for x in s),
                    'definition': 'Station mit mindestens einem Abgang in StationGrid.marked (zu lang, ab '
                                  f'{TAIL_MIN_HOMES} Wohngebäuden jenseits der Grenze) oder SizedGrid.marked '
-                                 '(Bemessung scheitert); Ausläufer zählen nicht'},
+                                 '(Strom auch mit 2 × größtem Typ über der Grenze); Ausläufer und reine Spannungsfälle zählen nicht'},
+        'voltage_only': {
+            'stations': len(st_volt), 'stations_share': round(len(st_volt) / n, 4) if n else 0.0,
+            'feeders': int(sum(x.get('marked_voltage', 0) for x in s)),
+            'stations_by_area': {a: sum(x['area'] == a for x in st_volt) for a in AREAS},
+            'definition': 'Abgang thermisch ausreichend, aber Spannungsfall (5 %) bzw. -anhebung (3 %) auch mit dem '
+                          'stärksten Typ über der Planungsgrenze (SizedGrid.marked_voltage); zählt nicht zur '
+                          '10-%-Grenze (Owner, Fix-Runde 4)'},
         'tails': {'stations': int(sum(x['tail'] > 0 for x in s)), 'feeders': int(sum(x['tail'] for x in s)),
                   'reach_m': _stats([r for x in s for r in x['tail_reach_m']]),
                   'definition': f'Abgang zu lang, aber weniger als {TAIL_MIN_HOMES} Wohngebäude jenseits der '
@@ -361,7 +379,7 @@ def _geojson(grids):
 
 
 def marked_share(grids):
-    """Anteil der Stationen mit markiertem Abgang (zu lang oder Bemessung scheitert)."""
+    """Anteil der Stationen mit markiertem Abgang (zu lang oder Strom zu hoch; reine Spannungsfälle zählen nicht)."""
     if not grids:
         return 0.0
     return sum(bool((g.marked | z.marked).any()) for g, z, *_ in grids.values()) / len(grids)

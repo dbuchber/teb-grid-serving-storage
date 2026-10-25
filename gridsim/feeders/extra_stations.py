@@ -4,7 +4,7 @@ Ergebnis ist eine **neue Variante** der vorbereiteten Daten (z. B. ``prepared-ns
 unverändert. Ablauf (``prepare_extra_stations``):
 
 1. Netze aller Stationen bauen und bemessen wie ``prepare-feeders``.
-2. ``plan_extra``: je Station mit markiertem Abgang (zu lang oder Bemessung scheitert) die Knoten dieser Abgänge
+2. ``plan_extra``: je Station mit markiertem Abgang (zu lang oder Strom zu hoch; reine Spannungsfälle nicht) die Knoten dieser Abgänge
    per k-Means gruppieren; k = kleinste Zahl, bei der kein Cluster mehr als ``MAX_CLUSTER`` Knoten hat (3,5 Abgänge
    × 30; Controller-Entscheidung, Netz OÖ im Mittel ca. 58 Anlagen je Station) und kein Knoten weiter
    als ``max_feeder_m`` / 1,2 (Luftlinie, Umwegfaktor) vom Clusterzentrum liegt. Standort = Wohngebäude nächst

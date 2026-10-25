@@ -261,8 +261,14 @@ def render(rep, index, acc, rows, chains):
     mk, tl = rep['marked'], rep['tails']
     L += ['', f"Markierte Abgänge: {mk['feeders_any']} Abgänge an {mk['stations_any']} von {n} Stationen "
               f"({_fmt(100 * mk['stations_any_share'], 1)} %, Grenze 10 %); davon zu lang {mk['feeders_long']}, "
-              f"Bemessung scheitert {mk['feeders_sizing']}. Ausläufer (nicht markiert): {tl['feeders']} Abgänge an "
+              f"Strom zu hoch {mk['feeders_sizing']}. Ausläufer (nicht markiert): {tl['feeders']} Abgänge an "
               f"{tl['stations']} Stationen.", '']
+    vo = rep.get('voltage_only')
+    if vo:
+        by = vo['stations_by_area']
+        L += [f"Nur Spannung (zählt nicht zur 10-%-Grenze): {vo['feeders']} Abgänge an {vo['stations']} Stationen "
+              f"({_fmt(100 * vo['stations_share'], 1)} %; " + ', '.join(f'{a} {by.get(a, 0)}' for a in ('stadt', 'ort', 'streu'))
+              + "). Dort müsste ein realer Netzbetreiber wegen der Spannung handeln.", '']
     areas = Counter(v['area'] for v in index.values())
     L += ['Gebietstypen: ' + ', '.join(f'{a} {areas.get(a, 0)}' for a in ('stadt', 'ort', 'streu')), '']
     L += ['## Abnahmegrenze „heute“', '']
@@ -337,7 +343,7 @@ def lines_report(prepared, cache, report):
     Path(report).parent.mkdir(parents=True, exist_ok=True)
     Path(report).write_text(md + '\n', encoding='utf-8')
     data = {'plausibility': [list(r) for r in plausibility(rep)], 'types': type_table(rep),
-            'marked': rep['marked'], 'tails': rep['tails'],
+            'marked': rep['marked'], 'voltage_only': rep.get('voltage_only'), 'tails': rep['tails'],
             'acceptance': None if acc is None else {**acc, 'worst_p90': [None if not np.isfinite(x) else round(float(x), 1)
                                                                           for x in acc['worst_p90']]},
             'compare': rows, 'chains': {y: {('nie' if k == 'nie' else f'{k[0]}:{k[1]}'): v for k, v in ch.items()}

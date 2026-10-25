@@ -143,3 +143,17 @@ def test_plausibility_german_decimals():
            'feeders_per_station': {'mean': 4.36, 'median': 3, 'target': [3.4, 3.8]}}
     rows = {r[0]: r for r in report.plausibility(rep)}
     assert rows['NS-Trasse je Station'][1:3] == ('2,06 km', 'ca. 2,7 km')
+
+
+def test_render_lists_voltage_only_feeders_separately():
+    """Fix-Runde 4: reine Spannungsfälle mit Anzahl, Stationen und Gebietstyp, getrennt von den markierten."""
+    rep = {'n_stations': 100, 'cable_share': {'by_route_length': 0.75, 'by_cable_length': 0.72, 'target': 0.79,
+                                             'band': [0.74, 0.84]},
+           'trunk_km_per_station': {'route_length': 2.0, 'cable_length': 3.0, 'target': 2.7},
+           'feeders_per_station': {'mean': 4.4, 'median': 3, 'target': [3.4, 3.8]}, 'km_per_type': {},
+           'marked': {'feeders_any': 9, 'stations_any': 8, 'stations_any_share': 0.08, 'feeders_long': 9,
+                      'feeders_sizing': 0}, 'tails': {'feeders': 0, 'stations': 0},
+           'voltage_only': {'feeders': 71, 'stations': 57, 'stations_share': 0.57,
+                            'stations_by_area': {'stadt': 2, 'ort': 26, 'streu': 29}}}
+    md = report.render(rep, {}, None, [], {})
+    assert 'Nur Spannung (zählt nicht zur 10-%-Grenze): 71 Abgänge an 57 Stationen (57,0 %; stadt 2, ort 26, streu 29)' in md

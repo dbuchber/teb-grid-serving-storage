@@ -4,7 +4,8 @@ Hausanschlüsse sind fest (``SERVICE``). Jeder Trunk-Abschnitt bekommt zuerst de
 oder Freileitung nach ``overhead``), der den Auslegungsstrom trägt. Danach wird je Abgang der Spannungsfall vom
 Trafo bis zum entferntesten Knoten geprüft (Σ (R·P + X·Q) / U² auf dem Pfad, Bezug ≤ 5 %, Einspeisung ≤ 3 %); bei
 Verletzung wird der Abschnitt des schlechtesten Pfads mit dem größten Beitrag eine Typstufe hochgesetzt, über dem
-größten Typ ``parallel = 2``. Hilft auch das nicht, wird der Abgang in ``SizedGrid.marked`` vermerkt.
+größten Typ ``parallel = 2``. Reicht der Strom auch mit 2 × größtem Typ nicht, steht der Abgang in ``SizedGrid.marked``;
+hält er nur die Spannung nicht, in ``SizedGrid.marked_voltage`` (eigener Grund, zählt nicht zur 10-%-Grenze).
 
 Alle Leistungen in kW, Spannungsfälle in Prozent der Nennspannung, R/X je Abschnitt in Ω (Länge und
 Parallelführung eingerechnet).
@@ -121,7 +122,10 @@ class SizedGrid:
     x_ohm: np.ndarray     # (m,) Reaktanz des Abschnitts in Ω
     du_load_pct: np.ndarray  # (n_feeder,) größter Spannungsfall je Abgang bei Auslegungsbezug
     du_feed_pct: np.ndarray  # (n_feeder,) größte Spannungsanhebung je Abgang bei Auslegungseinspeisung
-    marked: np.ndarray    # (n_feeder,) bool, Abgang hält die Planungsregel auch ausgereizt nicht ein
+    marked: np.ndarray    # (n_feeder,) bool, Strom auch mit 2 × größtem Typ über der Grenze (zählt zur 10-%-Grenze)
+    # (n_feeder,) bool, thermisch ausreichend, aber Spannungsfall/-anhebung auch ausgereizt über der Planungsgrenze;
+    # zählt nicht zur 10-%-Grenze und löst keine Zusatzstation aus (Owner, Fix-Runde 4: Spannung wird nicht bewertet)
+    marked_voltage: np.ndarray = None
 
 
 def _current_a(p_load_kw, p_feed_kw):
@@ -143,7 +147,8 @@ def size(grid: StationGrid, p_load, p_feed) -> SizedGrid:
     """Querschnitte je Abschnitt nach Grenzstrom und Spannungsfall (siehe Moduldoku).
 
     ``p_load``/``p_feed`` in kW je Abschnitt (aus ``design_flows``). ``marked`` enthält nur Abgänge, für die die
-    Bemessung scheitert; die Topologie-Markierung bleibt in ``grid.marked``.
+    Bemessung am Strom scheitert (reine Spannungsfälle in ``marked_voltage``); die Topologie-Markierung bleibt in
+    ``grid.marked``.
     """
     p_load = np.asarray(p_load, dtype=float)
     p_feed = np.asarray(p_feed, dtype=float)
@@ -195,6 +200,7 @@ def size(grid: StationGrid, p_load, p_feed) -> SizedGrid:
 
     # Spannungsfall: je Abgang den schlechtesten Pfad verbessern, bis Grenze erfüllt oder nichts mehr hochsetzbar
     done = marked.copy()
+    voltage = np.zeros(n_feeder, bool)
     for _ in range(4 * m + 1):
         r_ohm, x_ohm = impedance()
         du_l, du_f = _drop_pct(r_ohm, x_ohm, p_load, p_feed)
@@ -215,7 +221,7 @@ def size(grid: StationGrid, p_load, p_feed) -> SizedGrid:
             on_path = dt[nodes[k]].indices
             cand = [j for j in on_path if trunk[j] and not (step[j] == len(lists[j]) - 1 and parallel[j] == MAX_PARALLEL)]
             if not cand:
-                marked[f] = done[f] = True
+                voltage[f] = done[f] = True
                 continue
             j = max(cand, key=lambda c: (seg_du[c], -c))
             if step[j] < len(lists[j]) - 1:
@@ -237,4 +243,5 @@ def size(grid: StationGrid, p_load, p_feed) -> SizedGrid:
     types = [line_type(j).name for j in range(m)]
     i_max = np.array([line_type(j).i_max_a * parallel[j] for j in range(m)], dtype=float)
     return SizedGrid(types=types, parallel=parallel.astype(np.int8), i_max_a=i_max, r_ohm=r_ohm, x_ohm=x_ohm,
-                     du_load_pct=du_load, du_feed_pct=du_feed, marked=marked)
+                     du_load_pct=du_load, du_feed_pct=du_feed, marked=marked,
+                     marked_voltage=voltage & ~marked)

@@ -203,7 +203,7 @@ def write_fake_feeders(root):
     d = root / 'feeders'
     d.mkdir()
     (d / 'index.json').write_text(json.dumps({
-        '0': {'area': 'stadt', 'n_feeders': 4, 'marked': 1}, '1': {'area': 'ort', 'n_feeders': 3, 'marked': 0},
+        '0': {'area': 'stadt', 'n_feeders': 4, 'marked': 1}, '1': {'area': 'ort', 'n_feeders': 3, 'marked': 0, 'marked_voltage': 3},
         '2': {'area': 'streu', 'n_feeders': 1, 'marked': 2}}))
     (d / 'lines.geojson').write_text(json.dumps({'type': 'FeatureCollection', 'features': [
         {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': [[14.4, 48.0], [14.41, 48.0]]},
@@ -247,6 +247,7 @@ def test_stations_area_and_marked_with_feeders(tmp_path):
     client = TestClient(create_app(prepared_root=root, cache_dir=tmp_path / 'cache', runner=FakeRunner()))
     st = client.get('/api/stations').json()
     assert [(s['area'], s['marked']) for s in st] == [('stadt', 1), ('ort', 0), ('streu', 2)]
+    assert [s['marked_voltage'] for s in st] == [None, 3, None]   # Fix-Runde 4: reine Spannungsfälle getrennt
 
 
 def test_lines_404_without_feeders(make):
