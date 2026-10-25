@@ -1,0 +1,324 @@
+"""Vorbereitungsschritt ``prepare-feeders``: je Station ein NS-Netz bauen, nach „heute“ bemessen und speichern.
+
+Eingaben: Knoten- und Stationskoordinaten aus ``build_members`` (eingefroren, wie gridsim.prepare), die
+vorbereiteten Arrays in ``prepared/<jahr>/`` und das Straßennetz ``osm_roads.json`` im Eingabeverzeichnis
+(fehlt es, entstehen alle Netze per Luftlinie). Ausgabe nach ``prepared/feeders/``:
+
+- ``<station>.npz``: Felder von ``StationGrid`` und ``SizedGrid``; ``downstream`` als CSR-Arrays
+  (``ds_data``, ``ds_indices``, ``ds_indptr``, ``ds_shape``), Geometrie als Punktliste mit Versatz je Abschnitt;
+  dazu die Auslegungsflüsse ``p_load_kw``/``p_feed_kw`` (nur zur Nachvollziehbarkeit).
+- ``index.json``: je Station Gebietstyp, Abgänge, Markierungen, Trunk- und Freileitungslänge.
+- ``lines.geojson``: alle Abschnitte in WGS84.
+- ``report.json``: Regionswerte (Prüfziele Spec 4.2, Kabelanteil 4.1).
+- ``manifest.json``: SHA256 der Eingaben und Schwellen.
+
+Auslegungslast je Knoten (Spec 4.3, Entscheidung 5), Szenario „heute“ als Erwartungswert, Wetterjahr 2012:
+Wärmepumpe = p_wp × elektrische Leistung in der Stunde mit der tiefsten Temperatur der Knotenzelle
+(``profiles.heat_pump_kw``, Wärme wie ``profiles.assign``, Heizgrenze aus ``wpev.spread(N, BASE_SEED)``,
+Versatz 0; Fernwärme 0); E-Autos = ev_share × Haushalte; PV-Spitze = kWp × max(pv_bins).
+"""
+import hashlib
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+from pyproj import Transformer
+from scipy import sparse
+
+from gridsim import legacy
+from gridsim.data import load_prepared
+from gridsim.feeders.area import AREAS
+from gridsim.feeders.roads import RoadGraph
+from gridsim.feeders.sizing import SizedGrid, design_flows, size
+from gridsim.feeders.topology import StationGrid, build_station_grid
+
+DESIGN_YEAR = 2012
+DESIGN_SCENARIO = 'heute'
+ROADS_FILE = 'osm_roads.json'
+MEMBER_INPUTS = ('osm_power.json', 'powerstations.json', 'pv_steyr_bbox.geojson', 'gebaeude_bbox.csv')
+TO_WGS84 = Transformer.from_crs(31287, 4326, always_xy=True)
+CHUNK = 2000            # Knoten je Wärmepumpenblock (8760 × CHUNK float32)
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for block in iter(lambda: fh.read(1 << 20), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _years(prepared_root):
+    return sorted(int(d.name) for d in Path(prepared_root).iterdir() if d.is_dir() and d.name.isdigit())
+
+
+def _members(inp, n_stations):
+    """Knoten- und Stationskoordinaten aus ``build_members``, Stationen verdichtet wie gridsim.prepare."""
+    sim = legacy.load('steyr_sim_variant_a')
+    _, st_xy, _, nodes = sim.build_members(inp)
+    used = sorted({n['station'] for n in nodes})
+    compact = {si: i for i, si in enumerate(used)}
+    st_of = np.array([compact[n['station']] for n in nodes], dtype=np.int32)
+    xy = np.array([n['xy'] for n in nodes], dtype=float).reshape(-1, 2)
+    hh = np.array([n['hh'] for n in nodes], dtype=int)
+    if len(used) != n_stations:
+        raise ValueError(f'build_members liefert {len(used)} Stationen mit Knoten, prepared hat {n_stations}')
+    return st_of, xy, hh, np.asarray(st_xy, dtype=float)[used]
+
+
+def _check_nodes(prepared_root, years, st_of, hh):
+    """Knotenliste aller Jahre und von ``build_members`` muss übereinstimmen (Station und Haushalte je Knoten)."""
+    for y in years:
+        d = Path(prepared_root) / str(y)
+        ps = np.load(d / 'nodes_station.npy')
+        ph = np.load(d / 'nodes_hh.npy')
+        if len(ps) != len(st_of):
+            raise ValueError(f'Knotenzahl weicht ab: prepared/{y} hat {len(ps)} Knoten, build_members {len(st_of)}')
+        bad = np.flatnonzero((ps != st_of) | (ph != hh))
+        if len(bad):
+            raise ValueError(f'Knoten weichen ab: prepared/{y} und build_members unterscheiden sich in {len(bad)} '
+                             f'Knoten (erster: {int(bad[0])}); prepared neu erzeugen')
+
+
+def design_loads(p):
+    """Auslegungslast je Knoten (global): Wärmepumpe kW, erwartete E-Autos, PV-Spitze kW (siehe Moduldoku)."""
+    from gridsim import profiles
+    from gridsim.run import BASE_SEED
+    share = profiles.SCENARIOS[DESIGN_SCENARIO]
+    hh = np.asarray(p.nodes_hh, dtype=int)
+    fw = np.asarray(p.nodes_fw, dtype=bool)
+    homes = hh > 0
+    fw_frac = fw[homes].mean() if homes.any() else 0.0
+    p_wp = min(1.0, share['wp_share'] / max(1 - fw_frac, 1e-9))           # wie profiles.assign
+    wpev = profiles.wpev
+    pauschal = np.where(hh == 1, wpev.HEAT_KWH_EFH, wpev.HEAT_KWH_MFH_HH * hh).astype(float)
+    lod1 = np.asarray(p.nodes_heat_kwh, dtype=float)
+    heat = np.where(homes & ~fw, np.where(np.isnan(lod1), pauschal, lod1), 0.0)
+    limits, _ = wpev.spread(len(hh), BASE_SEED)
+    dhw = np.asarray(p.nodes_dhw, dtype=float)
+    dhw = np.where(np.isnan(dhw), wpev.DHW_SHARE, dhw)
+    cells = np.asarray(p.nodes_cell)
+    temp = np.asarray(p.temp_cells, dtype=float)
+    wp_kw = np.zeros(len(hh))
+    for c in np.unique(cells[heat > 0]):
+        idx = np.flatnonzero((cells == c) & (heat > 0))
+        cold = int(np.argmin(temp[:, c]))
+        for k in range(0, len(idx), CHUNK):
+            part = idx[k:k + CHUNK]
+            el = profiles.heat_pump_kw(temp[:, c], heat[part], limits[part], np.zeros(len(part), int), dhw[part])
+            wp_kw[part] = el[cold]
+    cars = np.where(homes, share['ev_share'] * hh, 0.0)
+    kwp = np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1)
+    return p_wp * wp_kw, cars, kwp * float(np.max(p.pv_bins))
+
+
+def _save_station(path, grid: StationGrid, sized: SizedGrid, p_load=None, p_feed=None):
+    ds = grid.downstream.tocsr()
+    lens = np.array([len(gm) for gm in grid.geometry], dtype=np.int64)
+    coords = np.vstack(grid.geometry) if len(grid.geometry) else np.zeros((0, 2))
+    extra = {} if p_load is None else {'p_load_kw': np.asarray(p_load), 'p_feed_kw': np.asarray(p_feed)}
+    np.savez_compressed(
+        path, station=np.int64(grid.station), area=np.str_(grid.area), node_index=grid.node_index,
+        parent=grid.parent, length_m=grid.length_m, feeder=grid.feeder, service=grid.service,
+        overhead=grid.overhead, marked=grid.marked, ds_data=ds.data, ds_indices=ds.indices, ds_indptr=ds.indptr,
+        ds_shape=np.array(ds.shape, dtype=np.int64), geom_coords=coords, geom_offsets=np.concatenate([[0], np.cumsum(lens)]),
+        types=np.array(sized.types, dtype=str), parallel=sized.parallel, i_max_a=sized.i_max_a, r_ohm=sized.r_ohm,
+        x_ohm=sized.x_ohm, du_load_pct=sized.du_load_pct, du_feed_pct=sized.du_feed_pct, sized_marked=sized.marked,
+        **extra)
+
+
+def _load_station(path):
+    z = np.load(path, allow_pickle=False)
+    ds = sparse.csr_matrix((z['ds_data'], z['ds_indices'], z['ds_indptr']), shape=tuple(z['ds_shape']))
+    off = z['geom_offsets']
+    coords = z['geom_coords']
+    geometry = [coords[off[j]:off[j + 1]] for j in range(len(off) - 1)]
+    grid = StationGrid(station=int(z['station']), area=str(z['area']), node_index=z['node_index'],
+                       parent=z['parent'], length_m=z['length_m'], feeder=z['feeder'], service=z['service'],
+                       overhead=z['overhead'], downstream=ds, marked=z['marked'], geometry=geometry)
+    sized = SizedGrid(types=[str(t) for t in z['types']], parallel=z['parallel'], i_max_a=z['i_max_a'],
+                      r_ohm=z['r_ohm'], x_ohm=z['x_ohm'], du_load_pct=z['du_load_pct'],
+                      du_feed_pct=z['du_feed_pct'], marked=z['sized_marked'])
+    return grid, sized
+
+
+def load_feeders(prepared_root):
+    """Alle Stationsnetze aus ``prepared_root/feeders/``; None, wenn das Verzeichnis fehlt."""
+    d = Path(prepared_root) / 'feeders'
+    if not (d / 'index.json').exists():
+        return None
+    index = json.loads((d / 'index.json').read_text())
+    return {int(s): _load_station(d / f'{int(s)}.npz') for s in index}
+
+
+def _route(grid):
+    """Trassenlänge (m) eines Netzes ohne Hausanschlüsse, aufgeteilt in (Kabel, Freileitung).
+
+    Geteilte Abgänge und Direktabgänge liegen im selben Graben wie der Baum; ihre Geometrie wird in
+    Punktpaare zerlegt und gleiche Paare nur einmal gezählt. Längen werden mit Länge/Polylinienlänge des
+    Abschnitts skaliert (Luftlinien-Umwegfaktor). Ein Paar mit Kabel und Freileitung zählt anteilig nach Systemen.
+    """
+    edges = {}
+    for j in np.flatnonzero(~grid.service):
+        pts = np.asarray(grid.geometry[j], dtype=float)
+        if len(pts) < 2:
+            continue
+        d = np.hypot(*np.diff(pts, axis=0).T)
+        poly = d.sum()
+        scale = float(grid.length_m[j]) / poly if poly > 0 else 0.0
+        key_pts = np.round(pts, 2)
+        for a, b, ln in zip(map(tuple, key_pts[:-1]), map(tuple, key_pts[1:]), d):
+            if ln <= 0:
+                continue
+            e = edges.setdefault((min(a, b), max(a, b)), [ln * scale, 0, 0])
+            e[2 if grid.overhead[j] else 1] += 1
+    cable = sum(ln * c / (c + o) for ln, c, o in edges.values())
+    over = sum(ln * o / (c + o) for ln, c, o in edges.values())
+    return cable, over
+
+
+def _station_summary(grid, sized):
+    trunk = ~grid.service
+    sys_len = grid.length_m.astype(float) * sized.parallel
+    route_c, route_o = _route(grid)
+    node_reach = grid.downstream.T @ grid.length_m.astype(float)
+    n_feeder = len(grid.marked)
+    reach = np.zeros(n_feeder)
+    if len(node_reach):
+        end_feeder = np.full(len(node_reach), -1)
+        d = grid.downstream.tocsc()
+        for i in range(len(node_reach)):
+            end_feeder[i] = grid.feeder[d[:, i].indices[0]]
+        np.maximum.at(reach, end_feeder, node_reach)
+    has_nodes = np.zeros(n_feeder, bool)
+    has_nodes[np.unique(grid.feeder)] = True
+    return {
+        'area': grid.area, 'n_nodes': int(len(grid.node_index)), 'n_feeders': int(n_feeder),
+        'marked_long': int(grid.marked.sum()), 'marked_sizing': int(sized.marked.sum()),
+        'marked': int((grid.marked | sized.marked).sum()),
+        'trunk_m': round(float(sys_len[trunk].sum()), 1),
+        'overhead_m': round(float(sys_len[trunk & grid.overhead].sum()), 1),
+        'route_m': round(route_c + route_o, 1), 'route_overhead_m': round(route_o, 1),
+        'service_m': round(float(sys_len[grid.service].sum()), 1),
+        'reach_m': [round(float(r), 1) for r in reach],
+        'du_load_max_pct': round(float(sized.du_load_pct.max()), 2) if n_feeder else 0.0,
+    }
+
+
+def _stats(values):
+    v = np.asarray(values, dtype=float)
+    if not len(v):
+        return {'n': 0, 'mean': None, 'median': None, 'p90': None}
+    return {'n': int(len(v)), 'mean': round(float(v.mean()), 2), 'median': round(float(np.median(v)), 2),
+            'p90': round(float(np.percentile(v, 90)), 2)}
+
+
+def _report(summaries, grids):
+    n = len(summaries)
+    s = list(summaries.values())
+    trunk = sum(x['trunk_m'] for x in s)
+    over = sum(x['overhead_m'] for x in s)
+    route = sum(x['route_m'] for x in s)
+    route_o = sum(x['route_overhead_m'] for x in s)
+    svc = sum(x['service_m'] for x in s)
+    svc_o = sum(float((g.length_m * z.parallel)[g.service & g.overhead].sum()) for g, z in grids.values())
+    st_long = sum(x['marked_long'] > 0 for x in s)
+    st_size = sum(x['marked_sizing'] > 0 for x in s)
+    st_any = sum(x['marked'] > 0 for x in s)
+    km_type = {}
+    for g, z in grids.values():
+        for t, ln, par, svc_flag in zip(z.types, g.length_m, z.parallel, g.service):
+            key = t + (' (Hausanschluss)' if svc_flag else '')
+            km_type[key] = km_type.get(key, 0.0) + float(ln) * int(par) / 1000.0
+    areas = {}
+    for a in AREAS:
+        sub = [x for x in s if x['area'] == a]
+        areas[a] = {'stations': len(sub), 'feeders': sum(x['n_feeders'] for x in sub),
+                    'feeder_reach_m': _stats([r for x in sub for r in x['reach_m']]),
+                    'trunk_km': round(sum(x['trunk_m'] for x in sub) / 1000, 2)}
+    return {
+        'n_stations': n,
+        'marked': {'stations_long': int(st_long), 'stations_sizing': int(st_size), 'stations_any': int(st_any),
+                   'stations_any_share': round(st_any / n, 4) if n else 0.0,
+                   'feeders_long': sum(x['marked_long'] for x in s),
+                   'feeders_sizing': sum(x['marked_sizing'] for x in s), 'feeders_any': sum(x['marked'] for x in s),
+                   'definition': 'Station mit mindestens einem Abgang in StationGrid.marked (zu lang) '
+                                 'oder SizedGrid.marked (Bemessung scheitert)'},
+        'cable_share': {
+            'by_cable_length': round(1 - over / trunk, 4) if trunk else None,
+            'by_route_length': round(1 - route_o / route, 4) if route else None,
+            'by_cable_length_incl_service': round(1 - (over + svc_o) / (trunk + svc), 4) if trunk + svc else None,
+            'definition': 'ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt '
+                          'gemeinsame Gräben einmal',
+            'target': 0.79, 'band': [0.74, 0.84]},
+        'trunk_km_per_station': {'cable_length': round(trunk / n / 1000, 3) if n else None,
+                                 'route_length': round(route / n / 1000, 3) if n else None,
+                                 'target': 2.7},
+        'total_km': {'trunk_cable': round(trunk / 1000, 2), 'trunk_route': round(route / 1000, 2),
+                     'service': round(svc / 1000, 2)},
+        'feeders_per_station': {**_stats([x['n_feeders'] for x in s]), 'target': [3.4, 3.8]},
+        'areas': areas,
+        'km_per_type': {k: round(v, 2) for k, v in sorted(km_type.items())},
+        'thresholds': {a.name: {'max_nn_m': a.max_nn_m if np.isfinite(a.max_nn_m) else None,
+                                'cable_share': a.cable_share, 'max_feeder_m': a.max_feeder_m}
+                       for a in AREAS.values()},
+    }
+
+
+def _geojson(grids):
+    feats = []
+    for s, (g, z) in grids.items():
+        for j, pts in enumerate(g.geometry):
+            if pts is None or len(pts) < 2:
+                continue
+            lon, lat = TO_WGS84.transform(pts[:, 0], pts[:, 1])
+            feats.append({'type': 'Feature', 'geometry': {
+                'type': 'LineString', 'coordinates': [[round(float(x), 6), round(float(y), 6)] for x, y in zip(lon, lat)]},
+                'properties': {'station': int(s), 'type': z.types[j], 'parallel': int(z.parallel[j]),
+                               'feeder': int(g.feeder[j]), 'overhead': bool(g.overhead[j]),
+                               'service': bool(g.service[j]), 'length_m': round(float(g.length_m[j]), 1)}})
+    return {'type': 'FeatureCollection', 'features': feats}
+
+
+def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
+    inp, root = Path(input_dir), Path(prepared_root)
+    years = _years(root)
+    if DESIGN_YEAR not in years:
+        raise ValueError(f'prepared/{DESIGN_YEAR} fehlt (Auslegungsjahr)')
+    p = load_prepared(root, DESIGN_YEAR)
+    st_of, xy, hh, st_xy = _members(inp, p.n_stations)
+    _check_nodes(root, years, st_of, hh)
+
+    wp_kw, cars, kwp_peak = design_loads(p)
+    kwp = np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1)
+    roads = RoadGraph(inp / ROADS_FILE) if (inp / ROADS_FILE).exists() else None
+
+    out = root / 'feeders'
+    out.mkdir(parents=True, exist_ok=True)
+    grids, summaries = {}, {}
+    for s in range(p.n_stations):
+        idx = np.flatnonzero(st_of == s)
+        grid = build_station_grid(s, st_xy[s], idx, xy[idx], hh[idx], kwp[idx], roads)
+        p_load, p_feed = design_flows(grid, hh[idx], wp_kw[idx], cars[idx], kwp_peak[idx])
+        sized = size(grid, p_load, p_feed)
+        _save_station(out / f'{s}.npz', grid, sized, p_load, p_feed)
+        grids[s] = (grid, sized)
+        summaries[s] = _station_summary(grid, sized)
+
+    index = {str(s): {k: v for k, v in x.items() if k != 'reach_m'} for s, x in summaries.items()}
+    (out / 'index.json').write_text(json.dumps(index, ensure_ascii=False))
+    (out / 'lines.geojson').write_text(json.dumps(_geojson(grids), ensure_ascii=False))
+    (out / 'report.json').write_text(json.dumps(_report(summaries, grids), ensure_ascii=False, indent=1))
+    files = [f for f in (*MEMBER_INPUTS, ROADS_FILE) if (inp / f).exists()]
+    manifest = {'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                'design': {'year': DESIGN_YEAR, 'scenario': DESIGN_SCENARIO},
+                'legacy_frozen_at': legacy.FROZEN_AT,
+                'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),
+                'roads': roads is not None,
+                'inputs': {f: _sha256(inp / f) for f in files},
+                'prepared': {str(y): _sha256(root / str(y) / 'manifest.json') for y in years},
+                'thresholds': {a.name: [a.max_nn_m if np.isfinite(a.max_nn_m) else None, a.cable_share,
+                                        a.max_feeder_m] for a in AREAS.values()}}
+    (out / 'manifest.json').write_text(json.dumps(manifest, indent=1))
+    return out

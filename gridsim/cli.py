@@ -1,4 +1,4 @@
-"""Kommandozeile: prepare, batch, precompute (Pitch-Minimum), validate."""
+"""Kommandozeile: prepare, prepare-feeders, batch, precompute (Pitch-Minimum), validate."""
 import argparse
 import csv
 import itertools
@@ -43,6 +43,9 @@ def main(argv=None):
     p.add_argument('--input', type=Path, required=True)
     p.add_argument('--years', type=int, nargs='+', default=list(runmod.WEATHER_YEARS))
     p.add_argument('--out', type=Path, required=True)
+    f = sub.add_parser('prepare-feeders')
+    f.add_argument('--input', type=Path, required=True)
+    f.add_argument('--prepared', type=Path, required=True)
     for name in ('batch', 'precompute', 'validate'):
         b = sub.add_parser(name)
         b.add_argument('--prepared', type=Path, required=True)
@@ -63,6 +66,11 @@ def main(argv=None):
         for y in args.years:
             prepare(args.input, y, args.out)
             print('prepared', y)
+    elif args.cmd == 'prepare-feeders':
+        from gridsim.feeders.prepare import prepare_feeders
+        out = prepare_feeders(args.input, args.prepared)
+        print(json.dumps(json.loads((out / 'report.json').read_text())['marked'], ensure_ascii=False))
+        print('prepared feeders', out)
     elif args.cmd == 'batch':
         run_batch(args.prepared, args.cache, args.years, args.scenarios, args.charging, args.storage, args.pv,
                   args.seeds, args.workers)
