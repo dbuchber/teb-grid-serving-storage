@@ -1,4 +1,4 @@
-"""Kommandozeile: prepare, prepare-feeders, batch, precompute (Pitch-Minimum), validate."""
+"""Kommandozeile: prepare, prepare-feeders, batch, precompute (Pitch-Minimum), validate, lines-report."""
 import argparse
 import csv
 import itertools
@@ -14,24 +14,49 @@ PITCH_MINIMUM = {'years': (2012, 2023), 'scenarios': ('2030', '2040'), 'charging
                  'storage': ('base',), 'pv': (1.0,)}
 
 
-def run_batch(prepared, cache, years, scenarios, charging, storage, pv, n_seeds=20, workers=4):
+LINE_KPIS = ('stations_line_load_congestion', 'stations_line_feed_congestion', 'stations_line_only', 'line_over_m',
+             'netzspeicher_n', 'netzspeicher_kwh', 'netzspeicher_kw', 'netzspeicher_vollzyklen')
+NETZSPEICHER = {'off': False, 'on': True}
+SAME_IN_LINE_MODE = ('uncontrolled', 'winap')   # Ladezeiten fest: trafo+leitung rechnet dasselbe wie trafo
+
+
+def combos(years, scenarios, charging, storage, pv, limits=('trafo',), netzspeicher=(False,)):
+    """Alle Einstellungen der Matrix; ``trafo+leitung`` entfällt für ungesteuert/WiNAP (identisch zu ``trafo``)."""
+    for c in itertools.product(years, scenarios, charging, storage, pv, limits, netzspeicher):
+        if c[5] == 'trafo+leitung' and c[2] in SAME_IN_LINE_MODE and 'trafo' in limits:
+            continue
+        yield c
+
+
+def run_batch(prepared, cache, years, scenarios, charging, storage, pv, n_seeds=20, workers=4, limits=('trafo',),
+              netzspeicher=(False,)):
+    """Läuft die Matrix und schreibt je Einstellung ``region.csv``; Schlüssel (Jahr, Szenario, Laden, Speicher,
+    PV, Grenzmodus, Netzspeicher). Leitungs- und Netzspeicherbänder nur, wenn der Lauf sie liefert (sonst None)."""
     out = {}
-    for y, s, c, st, f in itertools.product(years, scenarios, charging, storage, pv):
-        params = runmod.RunParams(weather_year=y, scenario=s, pv_factor=f, charging=c, storage=st, n_seeds=n_seeds)
+    for y, s, c, st, f, lim, ns in combos(years, scenarios, charging, storage, pv, limits, netzspeicher):
+        params = runmod.RunParams(weather_year=y, scenario=s, pv_factor=f, charging=c, storage=st, n_seeds=n_seeds,
+                                  limits=lim, netzspeicher=ns)
         t = time.perf_counter()
         results = list(runmod.run_many(prepared, params, workers=workers, cache_dir=cache))
         bands = {k: runmod.band(results, k) for k in KPIS}
+        for k in LINE_KPIS:
+            vals = [r.region.get(k) for r in results]
+            bands[k] = None if any(v is None for v in vals) else runmod.band(results, k)
         d = Path(cache) / params.key()
         with open(d / 'region.csv', 'w', newline='', encoding='utf-8') as fh:
             w = csv.writer(fh, delimiter=';')
             w.writerow(['kpi', 'median', 'p10', 'p90', 'n'])
             for k, b in bands.items():
-                w.writerow([k, b['median'], b['p10'], b['p90'], b['n']])
-        out[(y, s, c, st, f)] = bands
-        print(json.dumps({'year': y, 'scenario': s, 'charging': c, 'storage': st, 'pv': f, 'key': params.key(),
+                if b is not None:
+                    w.writerow([k, b['median'], b['p10'], b['p90'], b['n']])
+        out[(y, s, c, st, f, lim, ns)] = bands
+        line = bands['stations_line_load_congestion']
+        print(json.dumps({'year': y, 'scenario': s, 'charging': c, 'storage': st, 'pv': f, 'limits': lim,
+                          'netzspeicher': ns, 'key': params.key(),
                           'wall_s': round(time.perf_counter() - t, 1),
                           'seed_s_max': max(r.runtime_s for r in results),
                           'stations_load_congestion': bands['stations_load_congestion']['median'],
+                          'stations_line_load_congestion': None if line is None else line['median'],
                           'e_net_mwh': bands['e_net_mwh']['median']}, ensure_ascii=False), flush=True)
     return out
 
@@ -61,8 +86,14 @@ def main(argv=None):
             b.add_argument('--charging', nargs='+', default=['uncontrolled'])
             b.add_argument('--storage', nargs='+', default=['base'])
             b.add_argument('--pv', type=float, nargs='+', default=[1.0])
+            b.add_argument('--limits', nargs='+', default=['trafo'], choices=runmod.LIMITS)
+            b.add_argument('--netzspeicher', nargs='+', default=['off'], choices=list(NETZSPEICHER))
         if name == 'validate':
             b.add_argument('--report', type=Path, default=Path('docs/gridsim-abnahme.md'))
+    lr = sub.add_parser('lines-report', help='Abnahmebericht NS-Leitungen aus prepared/feeders und dem Cache')
+    lr.add_argument('--prepared', type=Path, required=True)
+    lr.add_argument('--cache', type=Path, required=True)
+    lr.add_argument('--report', type=Path, required=True, help='Markdown; Zahlen zusätzlich als .json daneben')
     args = ap.parse_args(argv)
     if args.cmd == 'prepare':
         from gridsim.prepare import prepare
@@ -83,11 +114,18 @@ def main(argv=None):
         print('prepared feeders', out)
     elif args.cmd == 'batch':
         run_batch(args.prepared, args.cache, args.years, args.scenarios, args.charging, args.storage, args.pv,
-                  args.seeds, args.workers)
+                  args.seeds, args.workers, args.limits, [NETZSPEICHER[x] for x in args.netzspeicher])
     elif args.cmd == 'precompute':
         m = PITCH_MINIMUM
         run_batch(args.prepared, args.cache, m['years'], m['scenarios'], m['charging'], m['storage'], m['pv'],
                   args.seeds, args.workers)
+    elif args.cmd == 'lines-report':
+        from gridsim.feeders.report import lines_report
+        data = lines_report(args.prepared, args.cache, args.report)
+        acc = data['acceptance']
+        print(json.dumps(None if acc is None else {k: acc[k] for k in ('passed', 'passed_scaled', 'missing_years')}
+                         | {'over_100': acc['combined']['over_100'], 'over_120': acc['combined']['over_120']}))
+        print('report', args.report)
     elif args.cmd == 'validate':
         from gridsim.validate import run_validation
         run_validation(args.prepared, args.cache, args.report, args.seeds, args.workers)

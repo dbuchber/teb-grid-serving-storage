@@ -53,7 +53,7 @@ def run_validation(prepared, cache, report, seeds=20, workers=4):
                      f"{r['reference']:g} | {r['ratio']:.2f} | {'ja' if r['ok'] else 'nein'} |")
     lines += ['', f"Tendenz (heute < 2030 < 2040, 2023 < 2017 < 2012): {'ja' if trend_ok(results) else 'nein'}", '',
               '| PV-Faktor | Stationen mit Einspeiseengpass (Median, Band) | Referenz |', '|---|---|---|']
-    for (_, _, _, _, f), b in feed.items():
+    for (_, _, _, _, f, *_), b in feed.items():
         lo, hi = REFERENCE['feed'][f]
         s = b['stations_feed_congestion']
         lines.append(f"| × {f:g} | {s['median']:g} ({s['p10']:g}–{s['p90']:g}) | {lo}–{hi} |")
