@@ -1,32 +1,16 @@
 import json
-from collections import defaultdict
-
 import numpy as np
 import pytest
 
-from fakes import ROADS_CENTER, fake_roads, write_fake_prepared
+from fakes import (FEEDER_NODE_STATION, align_station_positions, fake_build_members_factory, fake_roads,
+                   write_fake_prepared)
 from gridsim import legacy
 from gridsim.feeders.prepare import load_feeders, prepare_feeders
-from gridsim.feeders.roads import TO_LAMBERT
 from gridsim.feeders.sizing import SizedGrid
 from gridsim.feeders.topology import StationGrid
 
-# Fake-Knoten wie in fakes.write_fake_prepared (Station 0, 0, 0, 0, 1, 1, 1, 1, 2, 2), entlang der Ost-West-Straße
-NODE_STATION = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
-NODE_OFFSET_M = [(40, 15), (80, -15), (120, 15), (160, -15), (-60, 12), (-110, -12), (-160, 12), (-210, -12),
-                 (30, 300), (60, 330)]
-LEGACY_STATION = [0, 2, 3]   # Legacy-Station 1 hat keine Knoten und fällt beim Verdichten weg
-
-
-def fake_build_members(inp):
-    c = np.array(TO_LAMBERT.transform(*ROADS_CENTER))
-    st_xy = np.array([c, c + [0, 2000], c + [-20, 0], c + [0, 250]])
-    stations = [{'osm_id': f'way/{i}', 'lon': 0.0, 'lat': 0.0} for i in range(4)]
-    hh = [1, 1, 5, 1, 1, 5, 5, 1, 0, 0]
-    kwp = [8, 10, 0, 0, 6, 0, 0, 0, 60, 40]
-    nodes = [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
-              'station': LEGACY_STATION[s]} for off, h, k, s in zip(NODE_OFFSET_M, hh, kwp, NODE_STATION)]
-    return stations, st_xy, ['Steyr'] * 4, nodes
+NODE_STATION = FEEDER_NODE_STATION
+fake_build_members = fake_build_members_factory()
 
 
 @pytest.fixture
@@ -39,6 +23,7 @@ def setup(tmp_path, monkeypatch):
     prepared = tmp_path / 'prepared'
     write_fake_prepared(prepared, 2012)
     write_fake_prepared(prepared, 2023)
+    align_station_positions(prepared, fake_build_members)
     return inp, prepared
 
 
@@ -149,3 +134,31 @@ def test_cli_prepare_feeders(setup, capsys):
     main(['prepare-feeders', '--input', str(inp), '--prepared', str(prepared)])
     assert (prepared / 'feeders' / 'report.json').exists()
     assert 'prepared feeders' in capsys.readouterr().out
+
+
+def test_prepare_feeders_rejects_station_position_mismatch(setup):
+    """Stationsposition aus build_members und stations.json müssen auf 1e-6 Grad übereinstimmen."""
+    inp, prepared = setup
+    path = prepared / '2023' / 'stations.json'
+    rows = json.loads(path.read_text())
+    rows[1]['lon'] += 2e-6
+    path.write_text(json.dumps(rows))
+    with pytest.raises(ValueError, match='Stationsposition'):
+        prepare_feeders(inp, prepared)
+
+
+def test_station_summary_skips_feeders_without_nodes():
+    """Abgang ohne Knoten geht nicht als Reichweite 0 in die Statistik ein."""
+    from scipy import sparse
+    from gridsim.feeders.prepare import _station_summary
+    pts = np.array([[0.0, 0.0], [100.0, 0.0]])
+    grid = StationGrid(station=0, area='ort', node_index=np.array([5]), parent=np.array([-1, -1, 0], np.int32),
+                       length_m=np.array([100.0, 50.0, 10.0], np.float32), feeder=np.array([0, 1, 0], np.int16),
+                       service=np.array([False, False, True]), overhead=np.zeros(3, bool),
+                       downstream=sparse.csr_matrix(np.array([[1], [0], [1]], np.int8)),
+                       marked=np.zeros(2, bool), geometry=[pts, pts * 0.5, pts * 0.1])
+    sized = SizedGrid(types=['NAYY 4x50'] * 3, parallel=np.ones(3, np.int8), i_max_a=np.ones(3),
+                      r_ohm=np.zeros(3), x_ohm=np.zeros(3), du_load_pct=np.zeros(2), du_feed_pct=np.zeros(2),
+                      marked=np.zeros(2, bool))
+    s = _station_summary(grid, sized)
+    assert s['reach_m'] == [110.0]

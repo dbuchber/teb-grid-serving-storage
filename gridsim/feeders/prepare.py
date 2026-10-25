@@ -53,18 +53,56 @@ def _years(prepared_root):
     return sorted(int(d.name) for d in Path(prepared_root).iterdir() if d.is_dir() and d.name.isdigit())
 
 
-def _members(inp, n_stations):
-    """Knoten- und Stationskoordinaten aus ``build_members``, Stationen verdichtet wie gridsim.prepare."""
+VARIANT_FILE = 'variant.json'
+POS_TOL_DEG = 1e-6      # Stationsposition: build_members bzw. Variante gegen stations.json
+
+
+def _members(inp, root, n_stations):
+    """Knoten- und Stationskoordinaten (EPSG:31287) und Station je Knoten.
+
+    Knoten (Lage, Haushalte) kommen immer aus ``build_members``. Ohne ``variant.json`` im Prepared-Ordner sind
+    Stationen und Zuordnung die von ``build_members``, Stationen verdichtet wie gridsim.prepare. Mit
+    ``variant.json`` (Zusatzstationen, siehe extra_stations.py) kommen die Stationskoordinaten aus der Variante und
+    die Zuordnung aus ``nodes_station.npy`` des Auslegungsjahrs.
+    """
     sim = legacy.load('steyr_sim_variant_a')
     _, st_xy, _, nodes = sim.build_members(inp)
+    xy = np.array([n['xy'] for n in nodes], dtype=float).reshape(-1, 2)
+    hh = np.array([n['hh'] for n in nodes], dtype=int)
+    vf = Path(root) / VARIANT_FILE
+    if vf.exists():
+        v = json.loads(vf.read_text())
+        st = np.array([[r['x'], r['y']] for r in v['stations']], dtype=float).reshape(-1, 2)
+        st_of = np.asarray(np.load(Path(root) / str(DESIGN_YEAR) / 'nodes_station.npy'), dtype=np.int32)
+        if len(st_of) != len(nodes):
+            raise ValueError(f'Knotenzahl weicht ab: Variante hat {len(st_of)} Knoten, build_members {len(nodes)}')
+        if len(st) != n_stations or len(np.unique(st_of)) != n_stations:
+            raise ValueError(f'Variante: {len(st)} Stationen in {VARIANT_FILE}, {len(np.unique(st_of))} mit Knoten, '
+                             f'prepared hat {n_stations}')
+        return st_of, xy, hh, st
     used = sorted({n['station'] for n in nodes})
     compact = {si: i for i, si in enumerate(used)}
     st_of = np.array([compact[n['station']] for n in nodes], dtype=np.int32)
-    xy = np.array([n['xy'] for n in nodes], dtype=float).reshape(-1, 2)
-    hh = np.array([n['hh'] for n in nodes], dtype=int)
     if len(used) != n_stations:
         raise ValueError(f'build_members liefert {len(used)} Stationen mit Knoten, prepared hat {n_stations}')
     return st_of, xy, hh, np.asarray(st_xy, dtype=float)[used]
+
+
+def _check_positions(prepared_root, years, st_xy):
+    """Stationskoordinaten (build_members bzw. Variante) müssen zu stations.json aller Jahre passen (1e-6 Grad)."""
+    lon, lat = TO_WGS84.transform(st_xy[:, 0], st_xy[:, 1]) if len(st_xy) else (np.zeros(0), np.zeros(0))
+    for y in years:
+        rows = json.loads((Path(prepared_root) / str(y) / 'stations.json').read_text())
+        if len(rows) != len(st_xy):
+            raise ValueError(f'Stationsposition: prepared/{y} hat {len(rows)} Stationen, erwartet {len(st_xy)}')
+        dev = np.maximum(np.abs(np.array([r['lon'] for r in rows]) - lon),
+                         np.abs(np.array([r['lat'] for r in rows]) - lat))
+        bad = np.flatnonzero(dev > POS_TOL_DEG)
+        if len(bad):
+            i = int(bad[0])
+            raise ValueError(f'Stationsposition weicht ab: prepared/{y}/stations.json und Stationskoordinaten '
+                             f'unterscheiden sich bei {len(bad)} Stationen (erste: {rows[i]["id"]}, '
+                             f'{dev[i]:.2e} Grad)')
 
 
 def _check_nodes(prepared_root, years, st_of, hh):
@@ -178,6 +216,12 @@ def _route(grid):
     return cable, over
 
 
+def node_feeder(grid):
+    """Abgang je Knoten (in ``grid.node_index``-Reihenfolge)."""
+    d = grid.downstream.tocsc()
+    return np.array([grid.feeder[d.indices[d.indptr[i]]] for i in range(d.shape[1])], dtype=int)
+
+
 def _station_summary(grid, sized):
     trunk = ~grid.service
     sys_len = grid.length_m.astype(float) * sized.parallel
@@ -185,14 +229,11 @@ def _station_summary(grid, sized):
     node_reach = grid.downstream.T @ grid.length_m.astype(float)
     n_feeder = len(grid.marked)
     reach = np.zeros(n_feeder)
+    has_nodes = np.zeros(n_feeder, bool)          # Abgänge ohne Knoten zählen nicht in die Reichweite
     if len(node_reach):
-        end_feeder = np.full(len(node_reach), -1)
-        d = grid.downstream.tocsc()
-        for i in range(len(node_reach)):
-            end_feeder[i] = grid.feeder[d[:, i].indices[0]]
+        end_feeder = node_feeder(grid)
         np.maximum.at(reach, end_feeder, node_reach)
-    has_nodes = np.zeros(n_feeder, bool)
-    has_nodes[np.unique(grid.feeder)] = True
+        has_nodes[end_feeder] = True
     return {
         'area': grid.area, 'n_nodes': int(len(grid.node_index)), 'n_feeders': int(n_feeder),
         'marked_long': int(grid.marked.sum()), 'marked_sizing': int(sized.marked.sum()),
@@ -201,7 +242,7 @@ def _station_summary(grid, sized):
         'overhead_m': round(float(sys_len[trunk & grid.overhead].sum()), 1),
         'route_m': round(route_c + route_o, 1), 'route_overhead_m': round(route_o, 1),
         'service_m': round(float(sys_len[grid.service].sum()), 1),
-        'reach_m': [round(float(r), 1) for r in reach],
+        'reach_m': [round(float(r), 1) for r in reach[has_nodes]],
         'du_load_max_pct': round(float(sized.du_load_pct.max()), 2) if n_feeder else 0.0,
     }
 
@@ -281,27 +322,54 @@ def _geojson(grids):
     return {'type': 'FeatureCollection', 'features': feats}
 
 
-def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
+def marked_share(grids):
+    """Anteil der Stationen mit markiertem Abgang (zu lang oder Bemessung scheitert)."""
+    if not grids:
+        return 0.0
+    return sum(bool((g.marked | z.marked).any()) for g, z, *_ in grids.values()) / len(grids)
+
+
+def build_grids(st_xy, xy, hh, kwp, st_of, loads, roads, n_stations):
+    """Netz und Bemessung je Station: {s: (StationGrid, SizedGrid, p_load, p_feed)}.
+
+    ``xy``/``hh``/``kwp``/``st_of`` und ``loads`` = (wp_kw, cars, kwp_peak) sind global je Knoten.
+    """
+    wp_kw, cars, kwp_peak = loads
+    grids = {}
+    for s in range(n_stations):
+        idx = np.flatnonzero(st_of == s)
+        grid = build_station_grid(s, st_xy[s], idx, xy[idx], hh[idx], kwp[idx], roads)
+        p_load, p_feed = design_flows(grid, hh[idx], wp_kw[idx], cars[idx], kwp_peak[idx])
+        grids[s] = (grid, size(grid, p_load, p_feed), p_load, p_feed)
+    return grids
+
+
+def feeder_context(input_dir, prepared_root):
+    """Gemeinsame Eingaben für ``prepare_feeders`` und Zusatzstationen, mit allen Prüfungen."""
     inp, root = Path(input_dir), Path(prepared_root)
     years = _years(root)
     if DESIGN_YEAR not in years:
         raise ValueError(f'prepared/{DESIGN_YEAR} fehlt (Auslegungsjahr)')
     p = load_prepared(root, DESIGN_YEAR)
-    st_of, xy, hh, st_xy = _members(inp, p.n_stations)
+    st_of, xy, hh, st_xy = _members(inp, root, p.n_stations)
     _check_nodes(root, years, st_of, hh)
+    _check_positions(root, years, st_xy)
+    return {'p': p, 'years': years, 'st_of': st_of, 'xy': xy, 'hh': hh, 'st_xy': st_xy,
+            'kwp': np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1), 'loads': design_loads(p),
+            'roads': RoadGraph(inp / ROADS_FILE) if (inp / ROADS_FILE).exists() else None}
 
-    wp_kw, cars, kwp_peak = design_loads(p)
-    kwp = np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1)
-    roads = RoadGraph(inp / ROADS_FILE) if (inp / ROADS_FILE).exists() else None
+
+def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
+    inp, root = Path(input_dir), Path(prepared_root)
+    ctx = feeder_context(inp, root)
+    p, years, roads = ctx['p'], ctx['years'], ctx['roads']
+    built = build_grids(ctx['st_xy'], ctx['xy'], ctx['hh'], ctx['kwp'], ctx['st_of'], ctx['loads'], roads,
+                        p.n_stations)
 
     out = root / 'feeders'
     out.mkdir(parents=True, exist_ok=True)
     grids, summaries = {}, {}
-    for s in range(p.n_stations):
-        idx = np.flatnonzero(st_of == s)
-        grid = build_station_grid(s, st_xy[s], idx, xy[idx], hh[idx], kwp[idx], roads)
-        p_load, p_feed = design_flows(grid, hh[idx], wp_kw[idx], cars[idx], kwp_peak[idx])
-        sized = size(grid, p_load, p_feed)
+    for s, (grid, sized, p_load, p_feed) in built.items():
         _save_station(out / f'{s}.npz', grid, sized, p_load, p_feed)
         grids[s] = (grid, sized)
         summaries[s] = _station_summary(grid, sized)
@@ -316,6 +384,7 @@ def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
                 'legacy_frozen_at': legacy.FROZEN_AT,
                 'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),
                 'roads': roads is not None,
+                'variant': (root / VARIANT_FILE).exists(),
                 'inputs': {f: _sha256(inp / f) for f in files},
                 'prepared': {str(y): _sha256(root / str(y) / 'manifest.json') for y in years},
                 'thresholds': {a.name: [a.max_nn_m if np.isfinite(a.max_nn_m) else None, a.cable_share,

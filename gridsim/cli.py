@@ -46,6 +46,9 @@ def main(argv=None):
     f = sub.add_parser('prepare-feeders')
     f.add_argument('--input', type=Path, required=True)
     f.add_argument('--prepared', type=Path, required=True)
+    f.add_argument('--extra-stations', action='store_true',
+                   help='Zusatzstationen für zu lange Abgänge; schreibt eine neue Variante nach --out')
+    f.add_argument('--out', type=Path, help='Ausgabeordner der Variante (nur mit --extra-stations)')
     for name in ('batch', 'precompute', 'validate'):
         b = sub.add_parser(name)
         b.add_argument('--prepared', type=Path, required=True)
@@ -68,8 +71,15 @@ def main(argv=None):
             print('prepared', y)
     elif args.cmd == 'prepare-feeders':
         from gridsim.feeders.prepare import prepare_feeders
-        out = prepare_feeders(args.input, args.prepared)
-        print(json.dumps(json.loads((out / 'report.json').read_text())['marked'], ensure_ascii=False))
+        if args.extra_stations:
+            if args.out is None:
+                ap.error('--extra-stations braucht --out')
+            from gridsim.feeders.extra_stations import prepare_extra_stations
+            out = prepare_extra_stations(args.input, args.prepared, args.out)
+        else:
+            out = prepare_feeders(args.input, args.prepared)
+        report = json.loads((out / 'report.json').read_text())
+        print(json.dumps({k: report[k] for k in ('marked', 'extra_stations') if k in report}, ensure_ascii=False))
         print('prepared feeders', out)
     elif args.cmd == 'batch':
         run_batch(args.prepared, args.cache, args.years, args.scenarios, args.charging, args.storage, args.pv,

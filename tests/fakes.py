@@ -83,3 +83,41 @@ def fake_roads(path):
                  {'type': 'way', 'id': 11, 'nodes': [4, 1, 5], 'tags': {'highway': 'residential'}}]
     path.write_text(json.dumps({'elements': elements}), encoding='utf-8')
     return path
+
+
+# Fake-Knoten wie in write_fake_prepared (Station 0, 0, 0, 0, 1, 1, 1, 1, 2, 2), entlang der Ost-West-Straße
+FEEDER_NODE_STATION = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
+FEEDER_NODE_OFFSET_M = [(40, 15), (80, -15), (120, 15), (160, -15), (-60, 12), (-110, -12), (-160, 12), (-210, -12),
+                        (30, 300), (60, 330)]
+FEEDER_LEGACY_STATION = [0, 2, 3]   # Legacy-Station 1 hat keine Knoten und fällt beim Verdichten weg
+
+
+def fake_build_members_factory(offsets=FEEDER_NODE_OFFSET_M):
+    """``build_members``-Ersatz mit Stationen und Knoten um ROADS_CENTER (EPSG:31287)."""
+    from gridsim.feeders.roads import TO_LAMBERT
+
+    def fake_build_members(inp):
+        from collections import defaultdict
+        c = np.array(TO_LAMBERT.transform(*ROADS_CENTER))
+        st_xy = np.array([c, c + [0, 2000], c + [-20, 0], c + [0, 250]])
+        stations = [{'osm_id': f'way/{i}', 'lon': 0.0, 'lat': 0.0} for i in range(4)]
+        hh = [1, 1, 5, 1, 1, 5, 5, 1, 0, 0]
+        kwp = [8, 10, 0, 0, 6, 0, 0, 0, 60, 40]
+        nodes = [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
+                  'station': FEEDER_LEGACY_STATION[s]} for off, h, k, s in zip(offsets, hh, kwp, FEEDER_NODE_STATION)]
+        return stations, st_xy, ['Steyr'] * 4, nodes
+
+    return fake_build_members
+
+
+def align_station_positions(prepared, build_members):
+    """stations.json-Koordinaten aller Jahre auf die (verdichteten) Stationen von ``build_members`` setzen."""
+    from pyproj import Transformer
+    back = Transformer.from_crs(31287, 4326, always_xy=True)
+    _, st_xy, _, _ = build_members(None)
+    lon, lat = back.transform(*np.asarray(st_xy)[FEEDER_LEGACY_STATION].T)
+    for d in sorted(p for p in prepared.iterdir() if p.name.isdigit()):
+        rows = json.loads((d / 'stations.json').read_text())
+        for r, x, y in zip(rows, lon, lat):
+            r['lon'], r['lat'] = float(x), float(y)
+        (d / 'stations.json').write_text(json.dumps(rows))
