@@ -123,3 +123,11 @@ def test_segment_table(prepared_with_feeders):  # noqa: F811
     assert len(rows) == len(fe[0][0].length_m)
     assert rows == sorted(rows, key=lambda r: -r['max_pct'])
     assert {'type', 'max_pct', 'hours_over', 'tail', 'service'} <= set(rows[0])
+
+
+def test_plausibility_german_decimals():
+    rep = {'cable_share': {'by_route_length': 0.7433, 'by_cable_length': 0.72, 'target': 0.79, 'band': [0.74, 0.84]},
+           'trunk_km_per_station': {'route_length': 2.057, 'cable_length': 3.1, 'target': 2.7},
+           'feeders_per_station': {'mean': 4.36, 'median': 3, 'target': [3.4, 3.8]}}
+    rows = {r[0]: r for r in report.plausibility(rep)}
+    assert rows['NS-Trasse je Station'][1:3] == ('2,06 km', 'ca. 2,7 km')

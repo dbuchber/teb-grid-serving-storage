@@ -13,6 +13,7 @@ wird nach der Regel wie geschrieben.
 """
 import json
 import math
+import re
 import warnings
 from collections import Counter
 from dataclasses import asdict
@@ -196,7 +197,12 @@ def plausibility(rep):
                   f"ca. {pb['target']['buildings_per_station']}", None),
                  ('Trasse je Wohngebäude', f"{pb['route_m_per_building']:.1f} m",
                   f"ca. {pb['target']['route_m_per_building']} m", None)]
-    return rows
+    return [(name, _comma(val), _comma(target), ok) for name, val, target, ok in rows]
+
+
+def _comma(text):
+    """Dezimalpunkt zwischen Ziffern → Komma (deutsche Schreibweise im Bericht)."""
+    return re.sub(r'(\d)\.(\d)', r'\1,\2', text)
 
 
 def type_table(rep):
