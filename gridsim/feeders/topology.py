@@ -17,22 +17,30 @@ Aufbau (wie ``build_net_roads`` in gridsim/legacy/steyr_sim_variant_a.py, ohne p
 - Jeder Ast ab der Sammelschiene ist ein Abgang. Abgänge werden geteilt (siehe ``_split``); ein geteilter
   Abgang ist ein eigenes Kabel ab der Sammelschiene im selben Graben (Länge = Weg ab Sammelschiene).
 - Reichweite eines Abgangs = Weglänge Sammelschiene → fernstes Gebäude einschließlich Hausanschluss.
-- Abgang zu lang (Reichweite > Grenze): liegen jenseits der Grenze weniger als ``TAIL_MIN_HOMES`` Wohngebäude
-  (hh > 0), ist er ein **Ausläufer** (``tail``, z. B. Stich zu Einzelgehöften; Controller 25.10.2026), sonst
-  markiert (``marked``, „bräuchte eigene Station“). Ausläufer werden wie jeder Abgang bemessen, aber nicht als
-  markiert gezählt.
+- Abgang zu lang (Reichweite > Grenze): liegen jenseits der Grenze ``TAIL_MIN_HOMES`` oder mehr Wohngebäude
+  (hh > 0), ist er markiert (``marked``, „bräuchte eigene Station“). Sonst ist er Kandidat für einen
+  **Ausläufer** (``tail``, z. B. Stich zu Einzelgehöften; Controller 25.10.2026). Die Entscheidung fällt je
+  Station: die fernen Wohngebäude aller Kandidaten werden wie in extra_stations gruppiert (``cluster_points``,
+  Radius ``max_feeder_m`` / 1,2, höchstens ``MAX_CLUSTER``); jede Gruppe ab ``TAIL_MIN_HOMES`` Wohngebäuden macht
+  ihre Abgänge markiert (ein Weiler, dessen Straßen knapp innerhalb der Grenze abzweigen), nur kleinere Gruppen
+  bleiben Ausläufer. Ausläufer werden wie jeder Abgang bemessen, aber nicht als markiert gezählt.
 """
+import math
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import sparse
+from scipy.cluster.vq import kmeans2
 
 from gridsim.feeders.area import AREAS, classify
 
 DIRECT_KWP = 30.0       # Annahme K1: Anlagen darüber an eigenem Abgang ab der Sammelschiene
 MAX_BUILDINGS = 30      # höchstens so viele Gebäude je Abgang
 LINE_DETOUR = 1.2       # Umwegfaktor der Luftlinie
-TAIL_MIN_HOMES = 6      # ab so vielen Wohngebäuden jenseits der Grenze markiert statt Ausläufer
+TAIL_MIN_HOMES = 6      # ab so vielen Wohngebäuden jenseits der Grenze (je Gruppe) markiert statt Ausläufer
+MAX_CLUSTER = int(3.5 * MAX_BUILDINGS)   # 105 Knoten je Gruppe/Zusatzstation (3,5 Abgänge × 30)
+TAIL_SEED = 20261025    # k-Means der fernen Wohngebäude; je Station TAIL_SEED + Stationsindex
 
 
 @dataclass
@@ -53,6 +61,35 @@ class StationGrid:
     def __post_init__(self):
         if self.tail is None:
             self.tail = np.zeros(len(self.marked), bool)
+
+
+def cluster_points(pts, radius, seed, max_size=MAX_CLUSTER):
+    """Kleinste k-Means-Teilung: ≤ ``max_size`` Punkte je Cluster, alle Punkte ≤ ``radius`` vom Zentrum.
+
+    Gibt Liste von (Indexarray, Zentrum) zurück; leere Cluster entfallen.
+    """
+    n = len(pts)
+    origin = pts.mean(axis=0)
+    rel = pts - origin
+    for k in range(max(1, math.ceil(n / max_size)), n + 1):
+        if k == n:
+            labels = np.arange(n)
+        elif k == 1:
+            labels = np.zeros(n, int)
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')               # leere Cluster sind hier erlaubt
+                _, labels = kmeans2(rel, k, seed=seed, minit='++')
+        out = []
+        for lab in np.unique(labels):
+            idx = np.flatnonzero(labels == lab)
+            centre = rel[idx].mean(axis=0)
+            if len(idx) > max_size or np.hypot(*(rel[idx] - centre).T).max() > radius:
+                break
+            out.append((idx, centre + origin))
+        else:
+            return out
+    raise AssertionError('unerreichbar: Einzelcluster erfüllen immer beide Bedingungen')
 
 
 def _polyline_m(pts):
@@ -302,9 +339,14 @@ def build_station_grid(station: int, st_xy, node_index, nodes_xy, nodes_hh, node
     if n:
         far = node_reach > a.max_feeder_m
         np.logical_or.at(marked, feeder[end], far)
-        far_homes = np.bincount(feeder[end], weights=(far & (np.asarray(nodes_hh) > 0)).astype(float),
-                                minlength=n_feeder)
+        far_home = far & (np.asarray(nodes_hh) > 0)
+        far_homes = np.bincount(feeder[end], weights=far_home.astype(float), minlength=n_feeder)
         tail = marked & (far_homes < TAIL_MIN_HOMES)
+        pick = np.flatnonzero(far_home & tail[feeder[end]])     # ferne Wohngebäude der Ausläufer-Kandidaten
+        if len(pick) >= TAIL_MIN_HOMES:
+            for members, _ in cluster_points(xy[pick], a.max_feeder_m / LINE_DETOUR, TAIL_SEED + int(station)):
+                if len(members) >= TAIL_MIN_HOMES:
+                    tail[feeder[end[pick[members]]]] = False
         marked &= ~tail
     return StationGrid(station=station, area=area, node_index=np.asarray(node_index), parent=parent,
                        length_m=length, feeder=feeder, service=service, overhead=overhead,

@@ -10,7 +10,7 @@ from fakes import (FEEDER_NODE_OFFSET_M, ROADS_CENTER, ROADS_HALF, align_station
 from gridsim import legacy
 from gridsim.data import ARRAYS
 from gridsim.feeders.extra_stations import SNAP_M, plan_extra, prepare_extra_stations, reassign
-from gridsim.feeders.prepare import TO_WGS84, build_grids, marked_share
+from gridsim.feeders.prepare import TO_WGS84, build_grids, marked_share, node_feeder
 from gridsim.feeders.roads import TO_LAMBERT, RoadGraph
 
 C = np.array(TO_LAMBERT.transform(*ROADS_CENTER))      # Kreuzung der Fake-Straßen
@@ -146,6 +146,62 @@ def test_small_cluster_skipped(roads):
     assert skipped == [8]
 
 
+def hamlet_roads(path, s_xy, j_xy, ends):
+    """Straße Station → Abzweig J und drei Straßen ab J (Koordinaten EPSG:31287) als Overpass-JSON."""
+    pts = [s_xy, j_xy] + list(ends)
+    lon, lat = TO_WGS84.transform(*np.array(pts).T)
+    elements = [{'type': 'node', 'id': i + 1, 'lon': float(x), 'lat': float(y)} for i, (x, y) in enumerate(zip(lon, lat))]
+    elements += [{'type': 'way', 'id': 100, 'nodes': [1, 2], 'tags': {'highway': 'residential'}}]
+    elements += [{'type': 'way', 'id': 101 + k, 'nodes': [2, 3 + k], 'tags': {'highway': 'residential'}}
+                 for k in range(len(ends))]
+    path.write_text(json.dumps({'elements': elements}), encoding='utf-8')
+    return RoadGraph(path)
+
+
+def test_hamlet_beyond_junction_is_marked(tmp_path):
+    """Abzweig innerhalb der Grenze, drei Straßen mit je 3–4 Wohngebäuden dahinter: markiert, eine Zusatzstation.
+
+    ``_split`` teilt jede Straße zum eigenen Abgang (< 6 ferne Wohngebäude je Abgang); die Gruppierung je Station
+    erkennt den Weiler (11 ferne Wohngebäude) und markiert die Abgänge.
+    """
+    from gridsim.feeders.topology import TAIL_MIN_HOMES
+    s = np.array([600000.0, 380000.0])
+    j = s + [600.0, 0.0]
+    dirs = [np.array([0.83, 0.55]), np.array([1.0, 0.0]), np.array([0.83, -0.55])]
+    roads = hamlet_roads(tmp_path / 'r.json', s, j, [j + 300.0 * d for d in dirs])
+    normal = lambda d: np.array([-d[1], d[0]])                    # noqa: E731
+    near = [s + [x, 10.0] for x in 40.0 * np.arange(1, 9)]        # Ortskern an der Zufahrt
+    near.append(j + 20.0 * dirs[0] + 10.0 * normal(dirs[0]))      # ein Gebäude knapp hinter dem Abzweig
+    far = [j + t * d + 10.0 * normal(d) for d, ts in zip(dirs, ([110, 150, 190], [110, 150, 190, 230],
+                                                               [110, 150, 190, 230])) for t in ts]
+    xy = np.array(near + far)
+    st_of = np.zeros(len(xy), int)
+    grids = grids_for(s[None, :], xy, st_of, roads)
+    grid = grids[0][0]
+    assert grid.area == 'ort'
+    nf = node_feeder(grid)
+    far_feeders = set(nf[len(near):].tolist())
+    assert len(far_feeders) == 3                                  # jede Straße ein eigener Abgang
+    assert all((nf[len(near):] == f).sum() < TAIL_MIN_HOMES for f in far_feeders)
+    assert set(np.flatnonzero(grid.marked)) == far_feeders and not grid.tail.any()
+    new = plan_extra(s[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads)
+    assert len(new) == 1 and sorted(new[0]['members'].tolist()) == list(range(len(near), len(xy)))
+
+
+def test_revert_small_new_station():
+    """Neue Station mit < 6 Wohngebäuden nach der Zuordnung: Knoten zurück an die vorherige Station."""
+    from gridsim.feeders.extra_stations import revert_small
+    previous = np.array([0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+    st_of = np.array([0, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 1])     # Station 2: 6 Gebäude, Station 3: 5
+    hh = np.ones(13, int)
+    out, small = revert_small(st_of, previous, hh, first_new=2)
+    assert small == [3]
+    assert out.tolist() == [0, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1]
+    hh[1] = 0                                                     # Halle zählt nicht: Station 2 hat nur 5
+    out, small = revert_small(st_of, previous, hh, first_new=2)
+    assert small == [2, 3] and out.tolist() == previous.tolist()
+
+
 def test_reassign_moves_only_marked_nodes(roads):
     """Nicht markierte Knoten behalten ihre Station, auch wenn eine neue Station näher liegt."""
     st_xy = np.vstack([C, east([1000.0])[0]])
@@ -258,20 +314,29 @@ def test_new_station_in_variant(setup):
 
 
 def test_trafo_kva_rule(setup):
-    """kva jeder Station der Variante = sim.trafo_kva der neuen Zuordnung."""
+    """kva geänderter Stationen = sim.trafo_kva der neuen Zuordnung; unveränderte Stationen: Zeile der Quelle."""
     inp, prepared, out = setup
     prepare_extra_stations(inp, prepared, out)
     sim = legacy.load('steyr_sim_variant_a')
     rows = json.loads((out / '2012' / 'stations.json').read_text())
+    src = {r['id']: r for r in json.loads((prepared / '2012' / 'stations.json').read_text())}
     st = np.load(out / '2012' / 'nodes_station.npy')
+    src_st = np.load(prepared / '2012' / 'nodes_station.npy')
     hh = np.load(out / '2012' / 'nodes_hh.npy').astype(int)
     kwp = np.load(out / '2012' / 'nodes_kwp_bins.npy').astype(float).sum(axis=1)
+    unchanged = 0
     for i, r in enumerate(rows):
         m = st == i
         assert m.any()
+        s = src.get(r['id'])
+        if s is not None and np.array_equal(np.flatnonzero(m), np.flatnonzero(src_st == s['idx'])):
+            assert r == {**s, 'idx': i}                           # bitgleich bis auf idx (Fake-kva ≠ Regel)
+            unchanged += 1
+            continue
         n_b, n_hh, k = int((hh[m] > 0).sum()), int(hh[m].sum()), float(kwp[m].sum())
         assert (r['n_buildings'], r['n_hh'], r['kwp']) == (n_b, n_hh, round(k, 1))
         assert r['kva'] == sim.trafo_kva(n_b, n_hh, k)
+    assert unchanged == 2                                         # Stationen 1 und 2 unberührt
 
 
 def test_cli_extra_stations(setup, capsys):

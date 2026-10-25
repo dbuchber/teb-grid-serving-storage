@@ -11,7 +11,9 @@ unverändert. Ablauf (``prepare_extra_stations``):
    dem Zentrum (nur Hallen im Cluster: Knoten nächst dem Zentrum), auf den nächsten Straßenknoten gezogen, wenn
    einer höchstens ``SNAP_M`` entfernt ist. Cluster mit weniger als ``TAIL_MIN_HOMES`` Wohngebäuden bekommen keine
    Station (Controller 25.10.2026); ihre Knoten bleiben an der bisherigen Station. Ausläufer (``StationGrid.tail``)
-   zählen nicht als markiert und werden nicht geclustert.
+   zählen nicht als markiert und werden nicht geclustert. Hat eine neue Station nach der Zuordnung (Schritt 3)
+   weniger als ``TAIL_MIN_HOMES`` Wohngebäude, wird sie aufgelöst und ihre Knoten gehen an die vorherige Station
+   zurück (``revert_small``).
 3. ``reassign``: nur Knoten der Cluster mit neuer Station (Gebäude und PV-Hallen) wechseln, und zwar zur nächsten Station
    (alt + neu) entlang der Straße (``RoadGraph.nearest_station``); ohne Straßenverbindung nächste Station in
    Luftlinie (≤ 600 m wie ``build_members``; weiter weg trotzdem, gezählt). Alle übrigen Knoten behalten ihre
@@ -20,28 +22,26 @@ unverändert. Ablauf (``prepare_extra_stations``):
 5. Sind danach mehr als 10 % der Stationen markiert, ein zweiter Durchgang (2.–4.), danach wird berichtet statt
    weiter iteriert.
 6. ``write_variant``: alle Dateien aller Wetterjahre kopiert; ``nodes_station.npy`` und ``stations.json``
-   ersetzt (gleiches Format; Trafo mit ``sim.trafo_kva`` der neuen Zuordnung, ``uw`` vom Elternknoten), im
+   ersetzt (gleiches Format; Trafo mit ``sim.trafo_kva`` der neuen Zuordnung, ``uw`` vom Elternknoten; alte
+   Stationen mit unveränderter Knotenmenge behalten ihre Zeile der Quelle bis auf ``idx``), im
    ``manifest.json`` je Jahr ein Verweis auf die Ausgangsvariante, dazu ``variant.json`` (Stationskoordinaten
    EPSG:31287, Elternstation, Bericht).
 7. ``prepare_feeders`` auf der Variante; der Bericht bekommt den Block ``extra_stations``.
 """
 import hashlib
 import json
-import math
 import shutil
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from scipy.cluster.vq import kmeans2
 from scipy.spatial import cKDTree
 
 from gridsim import legacy
 from gridsim.feeders.area import AREAS
 from gridsim.feeders.prepare import (DESIGN_YEAR, TO_WGS84, VARIANT_FILE, build_grids, feeder_context, marked_share,
                                      node_feeder, prepare_feeders)
-from gridsim.feeders.topology import LINE_DETOUR, MAX_BUILDINGS, TAIL_MIN_HOMES
+from gridsim.feeders.topology import LINE_DETOUR, MAX_CLUSTER, TAIL_MIN_HOMES, cluster_points
 
 ID_FORMAT = 'demo:steyr:ns-{:03d}'
 SNAP_M = 50.0           # Standort auf Straßenknoten ziehen, wenn höchstens so weit entfernt
@@ -49,36 +49,11 @@ AIR_MAX_M = 600.0       # Luftlinien-Zuordnung ohne Straße wie build_members (b
 MAX_PASSES = 2
 MARKED_LIMIT = 0.10     # Anteil markierter Stationen, ab dem ein weiterer Durchgang läuft
 SEED = 20261025         # k-Means; je Station SEED + Stationsindex
-MAX_CLUSTER = int(3.5 * MAX_BUILDINGS)   # 105 Knoten je Zusatzstation (3,5 Abgänge × 30)
 
 
 def _clusters(pts, radius, seed):
-    """Kleinste k-Means-Teilung: ≤ MAX_CLUSTER Punkte je Cluster, alle Punkte ≤ ``radius`` vom Zentrum.
-
-    Gibt Liste von (Indexarray, Zentrum) zurück; leere Cluster entfallen.
-    """
-    n = len(pts)
-    origin = pts.mean(axis=0)
-    rel = pts - origin
-    for k in range(max(1, math.ceil(n / MAX_CLUSTER)), n + 1):
-        if k == n:
-            labels = np.arange(n)
-        elif k == 1:
-            labels = np.zeros(n, int)
-        else:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')               # leere Cluster sind hier erlaubt
-                _, labels = kmeans2(rel, k, seed=seed, minit='++')
-        out = []
-        for lab in np.unique(labels):
-            idx = np.flatnonzero(labels == lab)
-            centre = rel[idx].mean(axis=0)
-            if len(idx) > MAX_CLUSTER or np.hypot(*(rel[idx] - centre).T).max() > radius:
-                break
-            out.append((idx, centre + origin))
-        else:
-            return out
-    raise AssertionError('unerreichbar: Einzelcluster erfüllen immer beide Bedingungen')
+    """Kleinste k-Means-Teilung mit ≤ MAX_CLUSTER Punkten je Cluster (siehe ``topology.cluster_points``)."""
+    return cluster_points(pts, radius, seed, MAX_CLUSTER)
 
 
 def _marked_local(grid, sized):
@@ -155,12 +130,31 @@ def reassign(st_xy, nodes_xy, roads, current=None, movable=None):
                  'air_far': int((miss & (d > AIR_MAX_M)).sum())}
 
 
-def _station_rows(stations, st_of, hh, kwp):
-    """stations.json-Zeilen (Format wie gridsim.prepare) aus der neuen Zuordnung."""
+def revert_small(st_of, previous, hh, first_new, min_homes=TAIL_MIN_HOMES):
+    """Neue Stationen (Index ≥ ``first_new``) mit weniger als ``min_homes`` Wohngebäuden nach der Zuordnung
+    auflösen: ihre Knoten gehen an die vorherige Station zurück. Gibt (Zuordnung, aufgelöste Stationen) zurück."""
+    st_of = np.asarray(st_of, dtype=np.int32).copy()
+    homes = np.bincount(st_of[np.asarray(hh) > 0], minlength=int(st_of.max(initial=-1)) + 1)
+    small = [i for i in range(first_new, len(homes)) if homes[i] < min_homes and (st_of == i).any()]
+    m = np.isin(st_of, small)
+    st_of[m] = np.asarray(previous, dtype=np.int32)[m]
+    return st_of, small
+
+
+def _station_rows(stations, st_of, hh, kwp, src_rows=None, src_st=None):
+    """stations.json-Zeilen (Format wie gridsim.prepare) aus der neuen Zuordnung.
+
+    Alte Station (``src_idx``) mit unveränderter Knotenmenge: Zeile der Quelle unverändert (nur ``idx`` neu),
+    damit kva/kwp nicht durch die float32-Summe der PV-Arrays driften.
+    """
     sim = legacy.load('steyr_sim_variant_a')
     rows = []
     for i, s in enumerate(stations):
         m = st_of == i
+        j = s.get('src_idx')
+        if j is not None and src_rows is not None and np.array_equal(np.flatnonzero(m), np.flatnonzero(src_st == j)):
+            rows.append({**src_rows[j], 'idx': i})
+            continue
         n_b, n_hh, k = int((hh[m] > 0).sum()), int(hh[m].sum()), float(kwp[m].sum())
         rows.append({'id': s['id'], 'idx': i, 'kva': sim.trafo_kva(n_b, n_hh, k), 'lon': s['lon'], 'lat': s['lat'],
                      'uw': s['uw'], 'synthetic': int(s['synthetic']), 'n_hh': n_hh, 'n_buildings': n_b,
@@ -184,7 +178,9 @@ def write_variant(prepared_root, out_root, stations, nodes_station, meta=None):
     years = sorted(int(d.name) for d in src.iterdir() if d.is_dir() and d.name.isdigit())
     hh = np.load(src / str(DESIGN_YEAR) / 'nodes_hh.npy').astype(int)
     kwp = np.load(src / str(DESIGN_YEAR) / 'nodes_kwp_bins.npy').astype(float).sum(axis=1)
-    rows = _station_rows(stations, st_of, hh, kwp)
+    src_rows = json.loads((src / str(DESIGN_YEAR) / 'stations.json').read_text())
+    src_st = np.load(src / str(DESIGN_YEAR) / 'nodes_station.npy')
+    rows = _station_rows(stations, st_of, hh, kwp, src_rows, src_st)
     ref = {'source': str(src), 'stations': len(rows)}
     for y in years:
         d_src, d_out = src / str(y), out / str(y)
@@ -215,12 +211,13 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
     ctx = feeder_context(inp, src)
     p, roads, xy, hh, kwp, loads = ctx['p'], ctx['roads'], ctx['xy'], ctx['hh'], ctx['kwp'], ctx['loads']
     stations = [{'id': r['id'], 'x': float(x), 'y': float(y), 'lon': r['lon'], 'lat': r['lat'], 'uw': r['uw'],
-                 'synthetic': int(r['synthetic']), 'parent': None, 'old': True}
-                for r, (x, y) in zip(p.stations, ctx['st_xy'])]
+                 'synthetic': int(r['synthetic']), 'parent': None, 'old': True, 'src_idx': j}
+                for j, (r, (x, y)) in enumerate(zip(p.stations, ctx['st_xy']))]
     st_of = ctx['st_of']
     grids = build_grids(ctx['st_xy'], xy, hh, kwp, st_of, loads, roads, len(stations))
     shares = {'source': round(marked_share(grids), 4)}
     passes, added, dropped, next_id = [], 0, {'old': 0, 'new': 0}, 1
+    reverted = {'stations': 0}
     for k in range(1, max_passes + 1):
         if k > 1 and shares[f'pass{k - 1}'] <= MARKED_LIMIT:
             break
@@ -234,10 +231,12 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
         next_id += len(new)
         added += len(new)
         st_xy = np.array([[s['x'], s['y']] for s in stations], dtype=float)
+        previous = st_of
         st_of, info = reassign(st_xy, xy, roads, current=st_of, movable=movable)
         info['movable'] = int(len(movable))
+        st_of, small = revert_small(st_of, previous, hh, len(stations) - len(new))
         keep = np.unique(st_of)
-        gone = [stations[i] for i in sorted(set(range(len(stations))) - set(keep.tolist()))]
+        gone = [stations[i] for i in sorted(set(range(len(stations))) - set(keep.tolist()) - set(small))]
         dropped['old'] += sum(s['old'] for s in gone)
         dropped['new'] += sum(not s['old'] for s in gone)
         remap = np.full(len(stations), -1, dtype=np.int32)
@@ -246,12 +245,15 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
         st_of = remap[st_of]
         grids = build_grids(st_xy[keep], xy, hh, kwp, st_of, loads, roads, len(stations))
         shares[f'pass{k}'] = round(marked_share(grids), 4)
-        passes.append({'pass': k, 'planned': len(new), 'skipped_small_clusters': len(skipped),
+        reverted['stations'] += len(small)
+        passes.append({'pass': k, 'planned': len(new), 'reverted_small_stations': len(small),
+                       'skipped_small_clusters': len(skipped),
                        'skipped_nodes': int(sum(skipped)), 'dropped': len(gone), 'stations': len(stations),
                        'assignment': info, 'marked_share': shares[f'pass{k}']})
 
     n_old = len(p.stations)
     extra = {'stations_old': n_old, 'stations_added': added, 'stations_dropped': dropped,
+             'stations_reverted_small': reverted['stations'],
              'stations_new_kept': sum(not s['old'] for s in stations), 'stations_total': len(stations),
              'marked_share': shares, 'marked_limit': MARKED_LIMIT, 'passes': passes,
              'buildings_without_road': {'air_le_600m': sum(x['assignment']['air'] for x in passes),
