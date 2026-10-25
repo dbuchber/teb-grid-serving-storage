@@ -74,6 +74,16 @@ def _binom_ppf(q, n, share):
     return np.where(n > 0, np.nan_to_num(k), 0.0)
 
 
+def _k_largest(down, values, k):
+    """Je Abschnitt (Zeile von ``down``) die Summe der ``k`` größten ``values`` der Knoten dahinter (> 0)."""
+    out = np.zeros(down.shape[0])
+    for j in np.flatnonzero(np.asarray(k) > 0):
+        v = values[down.indices[down.indptr[j]:down.indptr[j + 1]]]
+        v = np.sort(v[v > 0])[::-1]
+        out[j] = v[:int(k[j])].sum()
+    return out
+
+
 def design_flows(grid: StationGrid, hh, wp_kw, kwp_peak_kw, rule: DesignRule) -> tuple[np.ndarray, np.ndarray]:
     """Auslegungsbezug und -einspeisung je Abschnitt in kW (Fix-Runde 1).
 
@@ -82,8 +92,9 @@ def design_flows(grid: StationGrid, hh, wp_kw, kwp_peak_kw, rule: DesignRule) ->
     PV-Spitze. Bezug eines Abschnitts mit n Haushalten und m WP-berechtigten Knoten dahinter:
 
     - Haushalte: n · max(P_HH · g(n), H0-Spitze je Haushalt),
-    - Wärmepumpen: k = P90 Binomial(m, wp_share) ganze Geräte × mittlere Leistung der berechtigten Knoten
-      dahinter (alle gleichzeitig, wie gridsim in der kältesten Stunde ohne Versatz),
+    - Wärmepumpen: k = P90 Binomial(m, wp_share) ganze Geräte; Leistung = Summe der k größten vollen
+      WP-Leistungen der berechtigten Knoten dahinter (Fix-Runde 3; alle gleichzeitig, wie gridsim in der kältesten
+      Stunde ohne Versatz),
     - E-Autos: k = P90 Binomial(n, ev_share) Autos × p_ev(k) (11 kW je Auto bei k = 1).
 
     Einspeisung = Σ Spitzenleistung der Anlagen hinter dem Abschnitt.
@@ -92,11 +103,10 @@ def design_flows(grid: StationGrid, hh, wp_kw, kwp_peak_kw, rule: DesignRule) ->
     n_hh = d @ np.asarray(hh, dtype=float)
     wp = np.asarray(wp_kw, dtype=float)
     n_el = d @ (wp > 0).astype(float)
-    wp_sum = d @ wp
     p_feed = d @ np.asarray(kwp_peak_kw, dtype=float)
     p_hh = n_hh * np.maximum(P_HH_KW * g(n_hh), rule.h0_peak_kw)
     k_wp = _binom_ppf(rule.quantile, n_el, rule.wp_share)
-    p_wp = np.divide(k_wp * wp_sum, n_el, out=np.zeros_like(wp_sum), where=n_el > 0)
+    p_wp = _k_largest(grid.downstream.tocsr(), wp, k_wp)
     k_ev = _binom_ppf(rule.quantile, n_hh, rule.ev_share)
     p_load = p_hh + p_wp + k_ev * p_ev(k_ev)
     return p_load, p_feed

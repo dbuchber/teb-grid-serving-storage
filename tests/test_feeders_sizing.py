@@ -201,3 +201,16 @@ def test_minimum_trunk_section_in_stadt_and_ort(area):
 def test_minimum_section_still_upgrades_for_load():
     gr = make_grid([-1], [50], [False], [0], [0], area='stadt')
     assert size(gr, np.array([190.0]), np.zeros(1)).types == ['NAYY 4x240']   # 190 kW > 4x150 (≈185 kW)
+
+
+def test_heat_pumps_k_largest_powers():
+    """Fix-Runde 3: WP-Anteil = Summe der k größten vollen WP-Leistungen hinter dem Abschnitt, nicht k × Mittel."""
+    gr = star(4)
+    wp_kw = np.array([3.0, 3.0, 20.0, 25.0])
+    share = 0.3
+    assert binom.ppf(0.9, 4, share) == 2
+    rule = DesignRule(wp_share=share, ev_share=0.0, h0_peak_kw=0.0)
+    load, _ = design_flows(gr, np.zeros(4, int), wp_kw, np.zeros(4), rule)
+    assert load[0] == pytest.approx(45.0)                 # 25 + 20, nicht 2 × 12,75
+    # ein Knoten hinter dem Hausanschluss: P90 von Binomial(1, 0,3) = 1 → seine eigene Leistung
+    assert load[1:].tolist() == pytest.approx([3.0, 3.0, 20.0, 25.0])

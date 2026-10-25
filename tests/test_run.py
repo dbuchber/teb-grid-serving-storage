@@ -185,7 +185,7 @@ def test_key_includes_limits_and_netzspeicher():
 
 def test_model_version():
     import gridsim.run as runmod
-    assert runmod.MODEL_VERSION == '2026-10-26.3'
+    assert runmod.MODEL_VERSION == '2026-10-26.4'
 
 
 def test_line_overload_reaches_region(prepared_with_feeders):
