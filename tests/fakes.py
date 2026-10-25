@@ -67,3 +67,19 @@ def big_prepared(n_homes=2000, n_stations=20, year=2023, seed=1):
                     nodes_dhw=np.full(n_homes, np.nan, dtype=np.float32),
                     pv_bins=np.zeros((HOURS, 4), dtype=np.float32), h0=h0, h0_q=np.repeat(h0, 4) / 4,
                     temp_cells=temp, stations=stations)
+
+
+ROADS_CENTER = (14.42, 48.04)      # Kreuzung der beiden Fake-Straßen (lon, lat)
+ROADS_HALF = (0.03, 0.02)          # halbe Armlänge in Grad: etwa 2,2 km je Richtung
+
+
+def fake_roads(path):
+    """Kleines Overpass-JSON: Kreuz aus zwei geraden Straßen (West–Ost, Süd–Nord) um ROADS_CENTER."""
+    lon, lat = ROADS_CENTER
+    dlon, dlat = ROADS_HALF
+    nodes = {1: (lon, lat), 2: (lon - dlon, lat), 3: (lon + dlon, lat), 4: (lon, lat - dlat), 5: (lon, lat + dlat)}
+    elements = [{'type': 'node', 'id': i, 'lon': x, 'lat': y} for i, (x, y) in nodes.items()]
+    elements += [{'type': 'way', 'id': 10, 'nodes': [2, 1, 3], 'tags': {'highway': 'residential'}},
+                 {'type': 'way', 'id': 11, 'nodes': [4, 1, 5], 'tags': {'highway': 'residential'}}]
+    path.write_text(json.dumps({'elements': elements}), encoding='utf-8')
+    return path
