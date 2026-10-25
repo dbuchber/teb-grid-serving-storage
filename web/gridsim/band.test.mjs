@@ -63,3 +63,44 @@ test("lineStations lists station indices where a line is (also) the first bottle
   const vals = bottleneckValues([lseed(0, ["trafo", "leitung", "beide", "keiner"])], ["a", "b", "c", "d"]);
   assert.deepEqual(lineStations(vals, ["a", "b", "c", "d"]), [1, 2]);
 });
+
+import { costItems, effectiveNotice } from "./band.js";
+
+const costs = over => ({ storage_eur: 6e6, trafo_eur: null, line_eur: null, netzspeicher_eur: null, trafo_over_1000: 0, placeholders: [], ...over });
+
+test("costItems never yields null entries (no literal 'null' text in the panel)", () => {
+  for (const c of [costs({}), costs({ placeholders: ["trafo_step_eur"] }), costs({ netzspeicher_eur: 1e6, line_eur: 2e6, trafo_eur: 3e6 })]) {
+    const items = costItems(c, true);
+    assert.ok(items.every(i => i && typeof i.text === "string" && i.text.length));
+  }
+});
+
+test("costItems: grid storage line only when priced, placeholder hint only when present", () => {
+  const texts = (c, has = true) => costItems(c, has).map(i => i.text);
+  assert.ok(!texts(costs({})).some(t => t.startsWith("Grid storage")));
+  assert.ok(texts(costs({ netzspeicher_eur: 2.5e6 })).some(t => t.startsWith("Grid storage") && t.includes("2.5 M€")));
+  assert.ok(!texts(costs({})).some(t => t.startsWith("Placeholders")));
+  assert.ok(texts(costs({ placeholders: ["a", "b"] })).some(t => t === "Placeholders without source: a, b"));
+});
+
+test("costItems: cable line distinguishes priced, no rate, no line results", () => {
+  const cable = (c, has) => costItems(c, has).find(i => i.text.startsWith("Cable")).text;
+  assert.match(cable(costs({ line_eur: 4e6 }), true), /4 M€/);
+  assert.match(cable(costs({}), true), /enter a cost per metre/);
+  assert.match(cable(costs({}), false), /no line results/);
+});
+
+test("effectiveNotice: empty when settings were honoured or no seed yet", () => {
+  assert.equal(effectiveNotice([], { limits: "trafo+leitung", netzspeicher: true }), "");
+  const ok = [{ extra: { limits_effective: "trafo+leitung", netzspeicher_effective: true } }];
+  assert.equal(effectiveNotice(ok, { limits: "trafo+leitung", netzspeicher: true }), "");
+  assert.equal(effectiveNotice([{ extra: { limits_effective: "trafo", netzspeicher_effective: false } }], { limits: "trafo", netzspeicher: false }), "");
+  assert.equal(effectiveNotice([{ extra: {} }], { limits: "trafo+leitung", netzspeicher: false }), "");   // alter Cache ohne Angabe: nichts behaupten
+});
+
+test("effectiveNotice: tells when line limits or grid storage could not be applied", () => {
+  const s = [{ extra: { limits_effective: "trafo", netzspeicher_effective: false } }];
+  assert.match(effectiveNotice(s, { limits: "trafo+leitung", netzspeicher: false }), /No line data for this weather year .* transformer limits only/);
+  assert.match(effectiveNotice(s, { limits: "trafo", netzspeicher: true }), /Grid storage .* not applied/);
+  assert.match(effectiveNotice(s, { limits: "trafo+leitung", netzspeicher: true }), /transformer limits only.*Grid storage/s);
+});

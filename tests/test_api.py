@@ -62,6 +62,7 @@ def test_health_and_options(make):
     assert 'trafo_step_eur' in opt['placeholders']
     st = client.get('/api/stations').json()
     assert [s['id'] for s in st] == ['way/1', 'node/2', 'demo:steyr:station-003']
+    assert [s['idx'] for s in st] == [0, 1, 2]   # Stationsindex explizit (Zuordnung zu lines.geojson)
 
 
 @pytest.mark.parametrize('field,value', [('weather_year', 2020), ('pv_factor', 3.0), ('charging', 'foo'), ('n_seeds', 'x')])

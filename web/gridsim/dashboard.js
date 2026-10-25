@@ -1,7 +1,7 @@
 // Regionen-Dashboard (Session 1f): echte gridsim-Läufe über alle 257 Stationen, Band wächst mit jedem Seed.
 // Einbettung: mount(el, { apiBase: "/api/", stations, onSelectStation }) – siehe app.js der Seite.
 import { createApi } from "./api.js";
-import { BOTTLENECK, bandOf, bottleneckClass, bottleneckValues, fmt, lineStations, stationValues } from "./band.js";
+import { BOTTLENECK, bandOf, bottleneckClass, bottleneckValues, costItems, effectiveNotice, fmt, lineStations, stationValues } from "./band.js";
 import { el, renderCompare, renderDay, renderStrip, renderTiles } from "./charts.js";
 import { createStationMap } from "./map.js";
 
@@ -25,7 +25,7 @@ const COMPARE_KPI = { stations_load_congestion: ["Overloaded transformers", 0], 
 
 export function mount(root, { apiBase = "/api/", stations, onSelectStation = () => {} } = {}) {
   const api = createApi(apiBase);
-  const state = { ...DEFAULTS, seeds: [], nSeeds: 20, runId: null, ids: [], stop: null, selected: null, options: null };
+  const state = { ...DEFAULTS, seeds: [], nSeeds: 20, runId: null, ids: [], idxs: [], stop: null, selected: null, options: null };
   const select = (name, values) => el("label", { class: "gs-field" }, el("span", { text: FIELD_LABELS[name] }),
     el("select", { name, onchange: e => { state[name] = NUMERIC.includes(name) ? +e.target.value : name === "netzspeicher" ? e.target.value === "true" : e.target.value; } },
       ...values.map(v => el("option", { value: v, text: LABELS[name][v] ?? v, selected: String(v) === String(state[name]) || undefined }))));
@@ -71,7 +71,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     // Läufe mit Stationsnetzen: Farbe = erster Engpass (Median-Klasse über die bisherigen Seeds), sonst Überlaststunden
     const bn = bottleneckValues(state.seeds, state.ids);
     if (bn) map.update(bn, bottleneckClass); else map.update(stationValues(state.seeds, state.ids, "station_congestion_h"));
-    map.highlightLines(bn ? lineStations(bn, state.ids) : []);
+    map.highlightLines(bn ? lineStations(bn, state.ids, state.idxs) : []);
     renderLegend(!!bn);
   }
 
@@ -110,18 +110,23 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     redraw();
     status.textContent = "Starting…";
     try {
-      state.ids = (await api.stations(state.weather_year)).map(s => s.id);
+      const list = await api.stations(state.weather_year);
+      state.ids = list.map(s => s.id);
+      state.idxs = list.map(s => s.idx);   // Stationsindex der Leitungsdaten
+      const asked = { limits: state.limits, netzspeicher: state.netzspeicher };
+      const say = text => { const n = effectiveNotice(state.seeds, asked); status.textContent = n ? `${text} · ${n}` : text; };
       const r = await api.startRun(params());
       state.runId = r.run_id;
       status.textContent = r.status === "queued" ? "Waiting for a free slot…" : r.status === "cached" ? "Replaying a finished run…" : "Running on the server…";
       const t0 = performance.now();
       state.stop = api.streamRun(r.run_id, s => {
         state.seeds.push(s);
-        status.textContent = `${state.seeds.length} of ${state.nSeeds} seeds · ${fmt((performance.now() - t0) / 1000, 1)} s`;
+        say(`${state.seeds.length} of ${state.nSeeds} seeds · ${fmt((performance.now() - t0) / 1000, 1)} s`);
         redraw();
       }, async done => {
         runBtn.disabled = false;
-        status.textContent = done.status === "error" ? `Run failed: ${done.error}` : `${state.seeds.length} seeds in ${fmt((performance.now() - t0) / 1000, 1)} s`;
+        if (done.status === "error") status.textContent = `Run failed: ${done.error}`;
+        else say(`${state.seeds.length} seeds in ${fmt((performance.now() - t0) / 1000, 1)} s`);
         if (state.selected) showDay(state.selected, false);
         updateCosts();
       });
@@ -191,15 +196,8 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     for (const [k, input] of Object.entries(costInputs)) if (input.value !== "") cost[k] = +input.value;
     try {
       const c = await api.costs(state.runId, cost);
-      costOut.replaceChildren(
-        el("p", { text: `Home batteries: ${fmt(c.storage_eur / 1e6, 1)} M€ for the median battery need.` }),
-        el("p", { text: c.trafo_eur === null ? "Transformers: enter a cost per size step (no sourced value yet)." : `Transformers: ${fmt(c.trafo_eur / 1e6, 1)} M€ (+1 size counts once, +2 or more counts twice).` }),
-        el("p", { text: `Stations above 1000 kVA (new MV connection, not priced): ${fmt(c.trafo_over_1000)}.` }),
-        el("p", { text: c.line_eur !== null ? `Cable reinforcement: ${fmt(c.line_eur / 1e6, 1)} M€ for the median length above rated current (synthetic LV grid, thermal only).`
-          : state.seeds.some(s => typeof s.region.line_over_m === "number") ? "Cable reinforcement: enter a cost per metre (no sourced value yet)."
-            : "Cable reinforcement: this run has no line results (no LV grid prepared on the server)." }),
-        c.netzspeicher_eur !== null ? el("p", { text: `Grid storage at line bottlenecks: ${fmt(c.netzspeicher_eur / 1e6, 1)} M€ for the median installed capacity.` }) : null,
-        c.placeholders.length ? el("p", { class: "gs-hint", text: `Placeholders without source: ${c.placeholders.join(", ")}` }) : null);
+      const hasLines = state.seeds.some(s => typeof s.region.line_over_m === "number");
+      costOut.replaceChildren(...costItems(c, hasLines).map(i => el("p", { class: i.hint ? "gs-hint" : undefined, text: i.text })));
     } catch (e) { costOut.textContent = `Costs unavailable: ${e.message}`; }
   }
 

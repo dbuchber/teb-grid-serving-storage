@@ -61,8 +61,38 @@ export function bottleneckClass(values, id) {
 }
 
 // Stationsindizes (Reihenfolge der API = Stationsindex im Modell), an denen die Leitung (mit) zuerst begrenzt
-export function lineStations(values, ids) {
-  return ids.flatMap((id, i) => ["leitung", "beide"].includes(values?.get(id)) ? [i] : []);
+// ``idxs``: Stationsindex je Eintrag von ``ids`` (``idx`` der API, passt zur Eigenschaft ``station`` der Leitungen)
+export function lineStations(values, ids, idxs = ids.map((_, i) => i)) {
+  return ids.flatMap((id, i) => ["leitung", "beide"].includes(values?.get(id)) ? [idxs[i]] : []);
+}
+
+// Hinweis, wenn ein Lauf die gewählten Grenzen nicht anwenden konnte (z. B. Wetterjahr ohne Stationsnetze);
+// leer, wenn alles galt oder ältere Seeds keine Angabe haben
+export function effectiveNotice(seeds, requested) {
+  const e = seeds.map(s => s.extra).find(x => x && "limits_effective" in x);
+  if (!e) return "";
+  const parts = [];
+  if (requested.limits === "trafo+leitung" && e.limits_effective !== "trafo+leitung")
+    parts.push("No line data for this weather year – computed with transformer limits only.");
+  if (requested.netzspeicher && e.netzspeicher_effective === false)
+    parts.push("Grid storage at line bottlenecks was not applied (needs line data).");
+  return parts.join(" ");
+}
+
+// Zeilen der Kostenanzeige als reine Daten (keine null-Einträge, die ``replaceChildren`` als Text "null" ausgäbe);
+// ``hasLineResults``: mindestens ein Seed hat Leitungskennzahlen
+export function costItems(c, hasLineResults) {
+  return [
+    { text: `Home batteries: ${fmt(c.storage_eur / 1e6, 1)} M€ for the median battery need.` },
+    { text: c.trafo_eur === null ? "Transformers: enter a cost per size step (no sourced value yet)."
+      : `Transformers: ${fmt(c.trafo_eur / 1e6, 1)} M€ (+1 size counts once, +2 or more counts twice).` },
+    { text: `Stations above 1000 kVA (new MV connection, not priced): ${fmt(c.trafo_over_1000)}.` },
+    { text: c.line_eur !== null ? `Cable reinforcement: ${fmt(c.line_eur / 1e6, 1)} M€ for the median length above rated current (synthetic LV grid, thermal only).`
+      : hasLineResults ? "Cable reinforcement: enter a cost per metre (no sourced value yet)."
+        : "Cable reinforcement: this run has no line results (no LV grid prepared on the server)." },
+    ...(c.netzspeicher_eur !== null ? [{ text: `Grid storage at line bottlenecks: ${fmt(c.netzspeicher_eur / 1e6, 1)} M€ for the median installed capacity.` }] : []),
+    ...(c.placeholders.length ? [{ text: `Placeholders without source: ${c.placeholders.join(", ")}`, hint: true }] : []),
+  ];
 }
 
 export function linear([d0, d1], [r0, r1]) {
