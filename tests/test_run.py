@@ -1,4 +1,6 @@
 import json
+from dataclasses import asdict
+from pathlib import Path
 
 import pytest
 
@@ -75,3 +77,130 @@ def test_key_includes_model_version(monkeypatch):
 
 def test_params_accept_moderate_scenario():
     RunParams(weather_year=2023, scenario="2040m", n_seeds=1).validate()
+
+
+# --- Task 7: Leitungskennzahlen im Lauf ---------------------------------------------------------------------------
+
+REFERENCE = json.loads((Path(__file__).parent / 'data' / 'trafo_reference.json').read_text())
+LINE_EXTRA = ('station_line_max_pct', 'station_line_load_h', 'station_line_feed_h', 'station_first_load',
+              'station_first_feed')
+LINE_REGION = ('stations_line_load_congestion', 'stations_line_feed_congestion', 'stations_line_only', 'line_over_m',
+               'line_over_m_load', 'line_over_m_feed', 'marked_feeders', 'tail_feeders')
+FIRST = {'trafo', 'leitung', 'beide', 'keiner'}
+
+
+@pytest.fixture(scope='module')
+def prepared_with_feeders(tmp_path_factory):
+    """Fake prepared (2012, 2023) mit ``feeders/`` aus ``prepare_feeders`` (Fake-Straßen und -Mitglieder)."""
+    from fakes import align_station_positions, fake_build_members_factory, fake_roads
+    from gridsim import legacy
+    from gridsim.feeders.prepare import prepare_feeders
+    tmp = tmp_path_factory.mktemp('feeders')
+    build = fake_build_members_factory()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(legacy.load('steyr_sim_variant_a'), 'build_members', build)
+        inp = tmp / 'input'
+        inp.mkdir()
+        fake_roads(inp / 'osm_roads.json')
+        prepared = tmp / 'prepared'
+        write_fake_prepared(prepared, 2012)
+        write_fake_prepared(prepared, 2023)
+        align_station_positions(prepared, build)
+        prepare_feeders(inp, prepared)
+    return prepared
+
+
+def _assert_matches_reference(got, ref):
+    assert set(got.region) >= set(ref['region'])
+    for k, v in ref['region'].items():
+        if isinstance(v, int) and not isinstance(v, bool):
+            assert got.region[k] == v, k
+        else:
+            assert got.region[k] == pytest.approx(v, rel=1e-9, abs=0), k
+    for k in ('station_load_kw_max', 'station_congestion_h', 'station_feed_h', 'worst_day'):
+        assert getattr(got, k) == ref[k], k
+
+
+@pytest.mark.parametrize('set_name', ['default', 'stressed'])
+@pytest.mark.parametrize('charging', ['uncontrolled', 'winap', 't3d', 'controlled', 'v2g'])
+def test_default_params_trafo_kpis_unchanged(tmp_path, prepared_with_feeders, set_name, charging):
+    """Default-Params: Trafo-Kennzahlen wie im Stand 98113e5 (tests/data/trafo_reference.json), mit und ohne Feeders."""
+    kw = REFERENCE['sets'][set_name]
+    plain = load_prepared(write_fake_prepared(tmp_path), 2023)
+    with_feeders = load_prepared(prepared_with_feeders, 2023)
+    for i in (0, 1):
+        ref = REFERENCE['results'][set_name][charging][str(i)]
+        _assert_matches_reference(run_seed(plain, RunParams(charging=charging, **kw), i), ref)
+        _assert_matches_reference(run_seed(with_feeders, RunParams(charging=charging, **kw), i), ref)
+
+
+def test_runs_without_feeders(tmp_path):
+    """Review Focus 5: ohne ``feeders/`` läuft alles wie bisher, Leitungswerte sind None."""
+    p = load_prepared(write_fake_prepared(tmp_path), 2023)
+    r = run_seed(p, params(), 0)
+    for k in LINE_EXTRA:
+        assert r.extra[k] is None, k
+    for k in LINE_REGION:
+        assert r.region[k] is None, k
+    got = list(run_many(tmp_path, params(n_seeds=1), workers=1))
+    assert got[0].extra['station_line_max_pct'] is None and got[0].region == r.region
+
+
+def test_runs_with_feeders(prepared_with_feeders):
+    p = load_prepared(prepared_with_feeders, 2023)
+    r = run_seed(p, params(scenario='2040', pv_factor=2.0), 0)
+    n = p.n_stations
+    for k in LINE_EXTRA:
+        assert len(r.extra[k]) == n, k
+    assert all(x >= 0 for x in r.extra['station_line_max_pct'])
+    assert set(r.extra['station_first_load']) | set(r.extra['station_first_feed']) <= FIRST
+    for k in LINE_REGION:
+        assert r.region[k] is not None, k
+    assert r.region['line_over_m'] >= max(r.region['line_over_m_load'], r.region['line_over_m_feed'])
+    assert r.region['line_over_m'] <= r.region['line_over_m_load'] + r.region['line_over_m_feed'] + 1e-6
+    # Station 2 (nur PV-Hallen, 100 kWp an 125 kVA, PV × 2): Trafo bei Einspeisung überlastet
+    assert r.extra['station_first_feed'][2] in ('trafo', 'beide')
+    json.dumps(asdict(r))   # Cache-tauglich
+
+
+def test_run_many_workers_load_feeders(prepared_with_feeders):
+    a = run_seed(load_prepared(prepared_with_feeders, 2023), params(n_seeds=2), 1)
+    got = {r.index: r for r in run_many(prepared_with_feeders, params(n_seeds=2), workers=2)}
+    assert got[1].extra == a.extra and got[1].region == a.region
+
+
+def test_params_validate_limits():
+    with pytest.raises(ValueError, match='limits'):
+        params(limits='x').validate()
+    with pytest.raises(ValueError, match='netzspeicher'):
+        params(netzspeicher='ja').validate()
+    params(limits='trafo+leitung', netzspeicher=True).validate()
+    assert RunParams().limits == 'trafo' and RunParams().netzspeicher is False
+
+
+def test_key_includes_limits_and_netzspeicher():
+    keys = {params().key(), params(limits='trafo+leitung').key(), params(netzspeicher=True).key()}
+    assert len(keys) == 3
+
+
+def test_model_version():
+    import gridsim.run as runmod
+    assert runmod.MODEL_VERSION == '2026-10-26.1'
+
+
+def test_line_overload_reaches_region(prepared_with_feeders):
+    """Mit auf 30 % gesenkten Grenzströmen: Leitungsüberlast in extra und Region, Trafo-Werte unverändert."""
+    from dataclasses import replace
+    from gridsim.feeders.prepare import load_feeders
+    p = load_prepared(prepared_with_feeders, 2023)
+    pr = params(scenario='2040', pv_factor=2.0)
+    weak = {s: (g, replace(z, i_max_a=z.i_max_a * 0.3)) for s, (g, z) in load_feeders(prepared_with_feeders).items()}
+    base = run_seed(p, pr, 0)
+    r = run_seed(p, pr, 0, feeders=weak)
+    assert r.region['line_over_m'] > 0 and r.region['stations_line_feed_congestion'] >= 1
+    assert r.region['stations_line_only'] >= 1
+    assert {'leitung', 'beide'} & set(r.extra['station_first_feed'] + r.extra['station_first_load'])
+    assert max(r.extra['station_line_max_pct']) == pytest.approx(max(base.extra['station_line_max_pct']) / 0.3,
+                                                                 rel=1e-3)
+    for k in REFERENCE['results']['default']['uncontrolled']['0']['region']:
+        assert r.region[k] == base.region[k], k
