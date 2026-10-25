@@ -37,7 +37,7 @@ Zustand ist dabei plausibel (höchstens einzelne Abschnitte knapp über 100 %).
 
 - Keine belastbare Spannungsaussage. Spannung höchstens als grober Hinweis (siehe 4.4), klar gekennzeichnet.
 - Keine echten Netzdaten; keine Leitungsauskunft des Netzbetreibers (Nutzungsbedingungen).
-- Keine Änderung der Stationsliste und der Trafogrößen (meine Entscheidung, siehe 5.1).
+- Keine Änderung der bisherigen vorbereiteten Daten; Zusatzstationen nur in der neuen Variante (siehe 5.1).
 - Kein Lastfluss mit pandapower im Live-Modell.
 
 **Anti-Ziele (wäre ein Fehlschlag, auch wenn es technisch läuft)**
@@ -176,9 +176,13 @@ Platzhalter wie bisher, statt mit ihnen zu rechnen.
 
 ## 5. Entscheidungen
 
-1. **Stationen und Trafogrößen bleiben fest** (meine Entscheidung). Recherche zeigt, dass synthetische Netze
-   tendenziell zu wenige Stationen haben; neue Stationen würden aber alle bisherigen Trafo-Ergebnisse ändern.
-   Stattdessen werden nicht teilbare, zu lange Abgänge markiert und gezählt.
+1. **Zusatzstationen, wo Abgänge zu lang sind** (Owner, 25.10.2026; ersetzt „Stationen fest“). Erster Lauf auf
+   echten Daten: 215 von 257 Stationen (84 %) mit zu langen oder nicht bemessbaren Abgängen, 7,1 Abgänge und
+   4,0 km Trasse je Station (Ziel 3,4–3,8 und ca. 2,7 km). Ursache: zu wenige Stationen. Lösung: synthetische
+   Zusatzstationen in den betroffenen Gebieten, gekennzeichnet wie die bisherigen synthetischen Stationen; Trafo
+   nach derselben Regel wie die übrigen (`trafo_kva`). Das ergibt eine **neue Variante** der vorbereiteten Daten
+   (`prepared-ns/`); die bisherige Variante und alle bisherigen Trafo-Ergebnisse bleiben unverändert erhalten.
+   Trafo-Ergebnisse der neuen Variante unterscheiden sich und werden im Abnahmebericht gegenübergestellt.
 2. **Nur thermisch bewerten**, Spannung nur als Hinweis (meine Entscheidung; Begründung: Winter-Lastfluss mit
    165 von 257 Stationen über 5 % heute).
 3. **Auslegung nach „heute“** (meine Entscheidung): Querschnitte aus der heutigen Last, damit das Netz wie gebaut

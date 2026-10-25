@@ -16,7 +16,7 @@
 - Default `RunParams(limits='trafo', netzspeicher=False)`: Trafo-Kennzahlen bitgleich zu `origin/feat/gridsim` bei gleichen Seeds und Eingaben.
 - `MODEL_VERSION` auf `'2026-10-26.1'` erhöhen.
 - Nur thermische Bewertung in Kennzahlen; Spannung nur als Hinweis in der Detailansicht mit Vermerk „synthetisches Netz, nicht belastbar“.
-- Stationsliste und `kva` unverändert.
+- Bisheriger Ordner `prepared/` bleibt unverändert; Zusatzstationen erzeugen einen neuen Ordner `prepared-ns/` (Task 5b, Spec Entscheidung 1 neu).
 - Grenzströme (A): NAYY 4x50 144, 4x150 275, 4x240 313; Al 4x25 135, Al 4x70 255, Al 4x95 320 (Weisenstein et al. 2022, Tab. 10). Hausanschluss Kabel NAYY 4x35 123, Freileitung Al 4x25.
 - Gleichzeitigkeit g(n) = 0,07 + 0,93·n^(−3/4); P_HH = 2,0 kW; cos φ 0,97 bei Bezug, 1,0 bei Einspeisung; U = 400 V.
 - Gebietstypen: stadt (Median-Nachbarabstand < 30 m, Kabel 100 %, Strang ≤ 500 m), ort (30–80 m, 80 %, 700 m), streu (> 80 m, 50 %, 1 000 m); höchstens 30 Gebäude je Abgang; ab 30 kWp eigener Abgang.
@@ -180,6 +180,28 @@ Auslegungslast je Knoten: `wp_kw_exp` = p_wp × elektrische WP-Leistung in der S
 - [ ] **Step 5:** Auf hetzner: `uv run python -m gridsim prepare-feeders --input /data/infra-kg-austria/work/steyr-pv-2026-10-24/input --prepared prepared` → 257 Dateien, `report.json`. Prüfen: Anteil Stationen mit markierten Abgängen; **> 10 % → anhalten, Owner fragen.**
 - [ ] **Step 5a:** Einmalige Kalibrierung (Spec 4.1): Liegt der regionale Kabelanteil außerhalb 74–84 %, die Schwellen `max_nn_m` von stadt/ort in 5-m-Schritten verschieben, bis er im Band liegt; gewählte Werte mit Begründung in `area.py` und im Commit festhalten. Danach nicht mehr ändern.
 - [ ] **Step 6:** Commit `feat(feeders): prepare-feeders mit Auslegung heute`.
+
+### Task 5b: Zusatzstationen (Owner-Entscheidung 25.10.2026)
+
+**Files:**
+- Create: `gridsim/feeders/extra_stations.py`
+- Modify: `gridsim/feeders/prepare.py` (Ausgabe in neuen Ordner), `gridsim/cli.py` (`prepare-feeders --extra-stations --out prepared-ns`)
+- Test: `tests/test_feeders_extra.py`
+
+**Interfaces:**
+- Produces:
+  - `plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict) -> list[dict]`: je Station mit markiertem Abgang (Topologie oder Bemessung) neue Standorte: die Gebäude der markierten Abgänge per k-Means (k = kleinste Zahl, bei der kein Cluster mehr als 30 Gebäude hat und kein Gebäude weiter als `max_feeder_m`/1,2 Luftlinie vom Clusterzentrum liegt), Standort = Gebäude nächst dem Zentrum (auf einer Straße, wenn möglich). Jede neue Station: `{'id': 'demo:steyr:ns-NNN', 'x', 'y', 'lon', 'lat', 'synthetic': 1, 'parent': <alte Station-ID>}`.
+  - Neuzuordnung: jedes Gebäude zur nächsten Station (alte + neue) entlang der Straße, Fallback Luftlinie ≤ 600 m wie bisher; Trafo je Station mit `sim.trafo_kva(n_buildings, n_hh, kwp)`.
+  - `write_variant(prepared_root, out_root, stations, nodes_station)`: kopiert alle Arrays aller Wetterjahre, ersetzt `nodes_station.npy` und `stations.json` (gleiches Format, `uw` vom Elternknoten), Manifest mit Verweis auf die Ausgangsvariante.
+  - Danach läuft `prepare_feeders` auf `out_root`.
+- Abbruch: bleiben nach einem Durchgang > 10 % der Stationen markiert, einen zweiten Durchgang ausführen; danach berichten statt weiter zu iterieren.
+
+- [ ] **Step 1: Failing tests** – `test_extra_station_splits_long_feeder` (Gebäude 1 500 m entfernt, Typ stadt → eine Zusatzstation, danach nicht mehr markiert); `test_variant_leaves_source_untouched` (Quellordner unverändert, SHA256 vor/nach); `test_new_station_ids_and_flags` (`synthetic == 1`, ID-Muster, `parent` gesetzt); `test_trafo_kva_rule` (kva = `sim.trafo_kva` der neuen Zuordnung).
+- [ ] **Step 2:** FAIL. **Step 3:** implementieren. **Step 4:** PASS, gesamte Suite grün.
+- [ ] **Step 5:** Auf hetzner im Ordner `/data/infra-kg-austria/work/gridsim-leitungen`: `prepare-feeders --extra-stations --out prepared-ns`; `report.json` mit Stationszahl alt/neu, Anteil markierter Stationen, Abgänge je Station, Trasse je Station, Kabelanteil; nach `docs/feeders-report-ns-2026-10-26.json` kopieren.
+- [ ] **Step 6:** Commit `feat(feeders): Zusatzstationen für zu lange Abgänge`.
+
+Folgeaufgaben (6–11) rechnen auf `prepared-ns/`; der Abnahmebericht stellt Trafo-Kennzahlen `prepared/` gegen `prepared-ns/`.
 
 ### Task 6: Knotenflüsse je Station und Abschnittsauslastung
 
