@@ -128,3 +128,12 @@ def test_heute_from_real_data_overrides_legacy():
     for s in ('2030', '2040'):
         assert profiles.SCENARIOS[s] == profiles.wpev.SCENARIOS[s]
     assert profiles.SCENARIOS['2040m'] == {'wp_share': 0.35, 'ev_share': 0.60}
+
+
+def test_scenario_2040r_realistic():
+    """Owner (Fix-Runde 4): 2040r = WP 50 %, E-Autos 60 %; 2040 (70 %) bleibt als Stresstest unverändert."""
+    from gridsim import profiles, run
+    assert profiles.SCENARIOS['2040r'] == {'wp_share': 0.50, 'ev_share': 0.60}
+    assert profiles.SCENARIOS['2040'] == profiles.wpev.SCENARIOS['2040']
+    assert '2040r' in run.SCENARIOS
+    run.RunParams(scenario='2040r').validate()

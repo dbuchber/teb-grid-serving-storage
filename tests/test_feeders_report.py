@@ -157,3 +157,8 @@ def test_render_lists_voltage_only_feeders_separately():
                             'stations_by_area': {'stadt': 2, 'ort': 26, 'streu': 29}}}
     md = report.render(rep, {}, None, [], {})
     assert 'Nur Spannung (zählt nicht zur 10-%-Grenze): 71 Abgänge an 57 Stationen (57,0 %; stadt 2, ort 26, streu 29)' in md
+
+
+def test_chain_with_2040r_as_last_step():
+    cls = {'heute': ['keiner', 'keiner'], '2030': ['keiner', 'keiner'], '2040r': ['trafo', 'keiner']}
+    assert report.chain(cls, end='2040r') == {('2040r', 'trafo'): 1, 'nie': 1}

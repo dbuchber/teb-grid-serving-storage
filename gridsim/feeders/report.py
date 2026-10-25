@@ -28,6 +28,7 @@ LIMIT_PCT, HARD_PCT = 100.0, 120.0
 MAX_OVER = 5
 SEVERITY = ('keiner', 'trafo', 'leitung', 'beide')     # Gleichstand: schwerere Klasse (wie web/gridsim/band.js)
 CHAIN = ('heute', '2030', '2040')
+ORDER = ('heute', '2030', '2040m', '2040r', '2040')   # Sortierung im Modusvergleich
 
 
 # --- Cache lesen ------------------------------------------------------------------------------------------------
@@ -128,13 +129,13 @@ def class_counts(classes):
     return {k: int(c.get(k, 0)) for k in SEVERITY}
 
 
-def chain(classes_by_scenario):
+def chain(classes_by_scenario, end='2040'):
     """Reihenfolge heute → 2030 → 2040: je Station das erste Szenario mit Engpass und dessen Klasse.
 
     ``classes_by_scenario`` = {szenario: Klassen je Station}; Ergebnis: Zähler über (Szenario, Klasse) und
-    ``'nie'`` für Stationen ohne Engpass bis zum letzten Szenario.
+    ``'nie'`` für Stationen ohne Engpass bis zum letzten Szenario. ``end``: letztes Glied (2040 oder 2040r).
     """
-    scen = [s for s in CHAIN if s in classes_by_scenario]
+    scen = [s for s in (*CHAIN[:-1], end) if s in classes_by_scenario]
     n = len(classes_by_scenario[scen[0]]) if scen else 0
     out = Counter()
     for i in range(n):
@@ -306,8 +307,8 @@ def render(rep, index, acc, rows, chains):
                      f"{cl['trafo']} / {cl['leitung']} / {cl['beide']} / {cl['keiner']} |")
         L.append('')
     if chains:
-        L += ['## Reihenfolge heute → 2030 → 2040 (ungesteuert, Grenzmodus trafo)', '',
-              '| Wetter | zuerst Trafo | zuerst Leitung | beide zugleich | nie bis 2040 | davon schon heute (T / L / b) |',
+        L += ['## Reihenfolge heute → 2030 → 2040r bzw. 2040 (ungesteuert, Grenzmodus trafo)', '',
+              '| Wetter (letztes Glied) | zuerst Trafo | zuerst Leitung | beide zugleich | nie | davon schon heute (T / L / b) |',
               '|---|---|---|---|---|---|']
         for y, ch in chains.items():
             def tot(cls):
@@ -327,18 +328,21 @@ def lines_report(prepared, cache, report):
     by_year = {y: r for y in ACCEPT_YEARS
                if (r := find(settings, weather_year=y, **ACCEPT_PARAMS)) is not None}
     acc = acceptance(by_year, rep['n_stations']) if by_year else None
-    keys = sorted(settings, key=lambda p: (p.weather_year, CHAIN.index(p.scenario) if p.scenario in CHAIN else 9,
+    keys = sorted(settings, key=lambda p: (p.weather_year, ORDER.index(p.scenario) if p.scenario in ORDER else 9,
                                            runmod.CHARGING.index(p.charging), p.limits, p.netzspeicher))
     rows = [compare_row(p, settings[p]) for p in keys if p.pv_factor == 1.0 and p.storage == 'base']
     chains = {}
-    for y in sorted({p.weather_year for p in settings}):
-        cls = {}
-        for s in CHAIN:
-            r = find(settings, weather_year=y, **{**ACCEPT_PARAMS, 'scenario': s})
-            if r is not None:
-                cls[s] = combined_class(station_class(r, 'station_first_load'), station_class(r, 'station_first_feed'))
-        if set(cls) == set(CHAIN):
-            chains[y] = chain(cls)
+    for end in ('2040r', '2040'):
+        steps = (*CHAIN[:-1], end)
+        for y in sorted({p.weather_year for p in settings}):
+            cls = {}
+            for s in steps:
+                r = find(settings, weather_year=y, **{**ACCEPT_PARAMS, 'scenario': s})
+                if r is not None:
+                    cls[s] = combined_class(station_class(r, 'station_first_load'),
+                                            station_class(r, 'station_first_feed'))
+            if set(cls) == set(steps):
+                chains[y if end == '2040' else f'{y} bis 2040r'] = chain(cls, end=end)
     md = render(rep, index, acc, rows, chains)
     Path(report).parent.mkdir(parents=True, exist_ok=True)
     Path(report).write_text(md + '\n', encoding='utf-8')

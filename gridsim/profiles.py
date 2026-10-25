@@ -22,7 +22,10 @@ DEADLINE_H = 7  # Ladeende spätestens am Folgetag 7 Uhr (gesteuertes Laden, WiN
 # assign je Wohngebäude; wp_share 0,23 ergibt 21,4 % der Haushalte (Steyr: weniger Fernwärme, mehr Haushalte in
 # Mehrfamilienhäusern). Die eingefrorenen Werte in legacy (0,15 / 0,08) bleiben unverändert.
 SCENARIOS = {**wpev.SCENARIOS, 'heute': {'wp_share': 0.23, 'ev_share': 0.076},
-             '2040m': {'wp_share': 0.35, 'ev_share': 0.60}}
+             '2040m': {'wp_share': 0.35, 'ev_share': 0.60},
+             # 2040r (Owner, 25.10.2026): Hauptergebnis 2040; WP 50 % (AIT-Szenarien 48–57 %), E-Autos wie 2040.
+             # 2040 (70 %) bleibt als Stresstest (docs/research/2026-10-25-szenarioanteile-wp-ev.md im Hauptrepo).
+             '2040r': {'wp_share': 0.50, 'ev_share': 0.60}}
 
 
 @dataclass
