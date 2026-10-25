@@ -293,6 +293,7 @@
           <label>Battery size <output id="o-kwh"></output><input type="range" id="bat-kwh" min="5" max="20" step="1" value="10"></label>
           <label>Installed price per kWh <output id="o-price"></output><input type="range" id="bat-price" min="400" max="900" step="25" value="650"></label>
           <label>Grid calls per year <output id="o-calls"></output><input type="range" id="bat-calls" min="0" max="40" step="1" value="20"></label>
+          <p class="hint">20 fits winter peaks in 2030 (median 1–7). Sunny summers bring 100+, but those only charge: little wear.</p>
         </form>
         <div class="bat-out">
           <div class="costbar" aria-hidden="true"><span class="c-sub" id="bar-sub"></span><span class="c-own" id="bar-own"></span></div>
@@ -306,6 +307,10 @@
           <p class="life-cap">Battery life: the orange part is what grid calls use up in 15 years.</p>
           <div class="lifebar" aria-hidden="true"><span id="life-fill"></span></div>
           <p class="note" id="bat-note"></p>
+          <p class="note">How many calls? In our simulation, short winter peaks in 2030 hit an affected transformer 1–7 times a
+            year (median), so 20 is generous. With 1.5 to 2 times today's solar there is a peak on almost every sunny day, over
+            100 a year, more than this slider shows. Those summer calls only ask the battery to charge from the roof instead of
+            feeding in, which adds hardly any wear. Wear comes from discharge calls in winter, which need level 2.</p>
         </div>
       </div>
     </div>
