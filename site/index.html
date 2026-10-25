@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Grid-Serving Storage Steyr</title>
 <link rel="stylesheet" href="vendor/maplibre-gl-4.7.1/maplibre-gl.css">
-<link rel="stylesheet" href="present.css?v=20261025d">
+<link rel="stylesheet" href="present.css?v=20261025f">
 <script src="vendor/maplibre-gl-4.7.1/maplibre-gl-csp.js" defer></script>
 <script type="module" src="js/present/main.js?v=20261025b"></script>
 </head>
@@ -36,13 +36,12 @@
   <section class="slide tap" data-label="The problem" aria-label="The problem">
     <div class="center">
       <div class="eyebrow">The problem</div>
-      <div class="big-number" aria-hidden="true"><span data-count="193">193</span><small> of 257</small></div>
-      <h2 tabindex="-1"><span class="sr-only">193 of 257 </span>transformers in our test region would be overloaded in winter 2040, in our stress case.</h2>
+      <div class="big-number" aria-hidden="true"><small>up to </small><span data-count="193">193</span><small> of 257</small></div>
+      <h2 tabindex="-1"><span class="sr-only">Up to 193 of 257 </span>transformers in our test region could be overloaded in winter 2040.</h2>
       <p>A <b>transformer</b> is the station in a neighbourhood that supplies the houses around it. Its <b>rating</b> is the power it may carry
          continuously. If 70 % of buildings heat with a heat pump and 60 % of cars are electric, most transformers go above their rating,
-         even in a mild winter like 2023. This is an upper bound: we size our synthetic transformers at the low end of Austrian field grids;
-         sized at the top end, 99 instead of 200 (weather year 2017). In summer the opposite happens: with twice today’s solar, 32–34 transformers receive more power from the roofs than they can carry.</p>
-      <p class="answer">With 35 % heat pumps it is still 152–181, but <b>smart charging</b> of the cars brings it down to 7–30 (optimistic count).</p>
+         even in a mild winter like 2023. This is the stress case and an upper bound: if the real transformers are as large as the biggest in published field grids, it is about 100. In summer the opposite happens: with twice today’s solar, 32–34 transformers receive more power from the roofs than they can carry.</p>
+      <p class="answer">With 35 % heat pumps it is still 152–181, but <b>smart charging</b> of the cars brings it down to 7–30, depending on the weather year (an optimistic count).</p>
     </div>
     <a class="source" href="details#results">Simulation results, median of 20 random draws</a>
     <button class="continue" type="button">Click to continue <span>↓</span></button>
@@ -195,7 +194,7 @@
   <section class="slide tap ies" data-label="Interoperability profile" data-steps="4" aria-label="Interoperability profile">
     <div class="content wide">
       <div class="eyebrow">The answer to the challenge · interoperability profile (IES method) · <span class="step-count">1 / 4</span></div>
-      <h2 tabindex="-1">Who exchanges what, in ten processes.</h2>
+      <h2 tabindex="-1">Who exchanges what, in twelve processes.</h2>
       <p class="lead-small">IES (Integrating the Energy System) describes who takes part in an energy process and which information they exchange,
          so devices from different manufacturers work together. A rough, reusable profile, not a full specification.</p>
       <ul class="actors" aria-label="Actors">
@@ -212,7 +211,7 @@
         <article data-at="1" data-acts="price box dso inv">
           <h3>Every day</h3>
           <p><b>P2 Prices</b>: one signed price list for tomorrow, 96 quarter hours, broadcast to all boxes.</p>
-          <p><b>P3 Test call</b>: short trial, e.g. once a month (weekly in the pilot); measures what the grid operator can rely on.</p>
+          <p><b>P3 Test call</b>: short trial, e.g. once a month; measures what the grid operator can rely on.</p>
         </article>
         <article data-at="2" data-acts="dso box inv sup agg">
           <h3>Bottleneck</h3>
@@ -225,12 +224,11 @@
           <p><b>P6 Fallback</b> to self-consumption. <b>P10</b>: keys revoked and replaced over the air.</p>
         </article>
       </div>
-      <p class="ifaces"><b>Interfaces:</b> grid operator → box: OpenADR (required by the Austrian connection rules for solar systems; for batteries our proposal)
-         and a LoRaWAN radio broadcast as an extra channel · box → inverter: SunSpec, EEBUS or IEEE 2030.5 · verification: smart meter.
-         Every exchange is listed with sender, receiver, information and standard in the <a href="details#exchanges">write-up</a>.</p>
-      <p class="ifaces"><b>From basement to business park.</b> The same signed call and the same limits work for every size. Home and business batteries
-         behind the meter relieve the local transformer; large storage from 250 kW upwards sits on the medium-voltage grid, gets the call via the
-         grid operator's telecontrol link with an acknowledgement, and relieves the substation.</p>
+      <p class="ifaces"><b>Interfaces:</b> grid operator → box: OpenADR (required for solar systems by the Austrian connection rules; for batteries our proposal) and a LoRaWAN radio broadcast ·
+         box → inverter: SunSpec, EEBUS or IEEE 2030.5 · verification: smart meter.</p>
+      <p class="ifaces"><b>Three storage classes, same processes:</b> home (up to 30 kW) and business behind the meter (30–250 kW) relieve the street transformer, via the box or a certified building energy manager.
+         Large storage (from 250 kW) relieves the medium-voltage grid and the substation, controlled by telecontrol with acknowledgement, a day-ahead flexibility schedule (P11) and flexible grid access (P12).
+         Business and large storage are not yet in the simulation.</p>
     </div>
     <a class="more" href="details#proposal">Actors, processes and rules in full →</a>
     <button class="continue" type="button">Click to continue <span>↓</span></button>
@@ -254,8 +252,7 @@
         <div class="col rise" style="--d:1">
           <h3>Where AI is used</h3>
           <p>We trained an image-recognition model on aerial photos to find solar systems built since 2023: it finds 55 % of real systems,
-             69 % of its finds are real. We compared its results with the BOKU map roof by roof. The model result is shown on the map only; the simulation uses the BOKU data.
-             No AI decides in the call path: calls are deterministic and checkable, a grid operator releases them.</p>
+             69 % of its finds are real. We compared its results with the BOKU map roof by roof. The simulation itself uses the BOKU map; the model result is shown on the map only. No AI decides in the call process: calls are deterministic, signed and checkable.</p>
           <h3>Test region</h3>
           <p>Steyr in Upper Austria is the region we chose to test the method. Everything runs the same for any other region with open data.</p>
         </div>
