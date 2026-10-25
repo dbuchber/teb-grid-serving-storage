@@ -1,0 +1,160 @@
+{
+ "n_stations": 771,
+ "marked": {
+  "stations_long": 10,
+  "stations_sizing": 0,
+  "stations_any": 10,
+  "stations_any_share": 0.013,
+  "feeders_long": 13,
+  "feeders_sizing": 0,
+  "feeders_any": 13,
+  "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang) oder SizedGrid.marked (Bemessung scheitert)"
+ },
+ "cable_share": {
+  "by_cable_length": 0.7391,
+  "by_route_length": 0.7494,
+  "by_cable_length_incl_service": 0.7549,
+  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben einmal",
+  "target": 0.79,
+  "band": [
+   0.74,
+   0.84
+  ]
+ },
+ "trunk_km_per_station": {
+  "cable_length": 1.104,
+  "route_length": 0.979,
+  "target": 2.7
+ },
+ "total_km": {
+  "trunk_cable": 851.05,
+  "trunk_route": 754.81,
+  "service": 305.82
+ },
+ "feeders_per_station": {
+  "n": 771,
+  "mean": 2.95,
+  "median": 3.0,
+  "p90": 5.0,
+  "target": [
+   3.4,
+   3.8
+  ]
+ },
+ "areas": {
+  "stadt": {
+   "stations": 69,
+   "feeders": 250,
+   "feeder_reach_m": {
+    "n": 250,
+    "mean": 207.5,
+    "median": 218.05,
+    "p90": 403.45
+   },
+   "trunk_km": 67.09
+  },
+  "ort": {
+   "stations": 406,
+   "feeders": 1340,
+   "feeder_reach_m": {
+    "n": 1340,
+    "mean": 271.63,
+    "median": 254.5,
+    "p90": 557.41
+   },
+   "trunk_km": 542.94
+  },
+  "streu": {
+   "stations": 296,
+   "feeders": 686,
+   "feeder_reach_m": {
+    "n": 686,
+    "mean": 279.11,
+    "median": 181.5,
+    "p90": 697.2
+   },
+   "trunk_km": 241.01
+  }
+ },
+ "km_per_type": {
+  "Al 4x25 (Hausanschluss)": 61.6,
+  "Al 4x70": 183.43,
+  "Al 4x95": 38.57,
+  "NAYY 4x150": 85.87,
+  "NAYY 4x240": 42.22,
+  "NAYY 4x35 (Hausanschluss)": 244.23,
+  "NAYY 4x50": 500.96
+ },
+ "thresholds": {
+  "stadt": {
+   "max_nn_m": 30.0,
+   "cable_share": 1.0,
+   "max_feeder_m": 500.0
+  },
+  "ort": {
+   "max_nn_m": 80.0,
+   "cable_share": 0.8,
+   "max_feeder_m": 700.0
+  },
+  "streu": {
+   "max_nn_m": null,
+   "cable_share": 0.5,
+   "max_feeder_m": 1000.0
+  }
+ },
+ "extra_stations": {
+  "stations_old": 257,
+  "stations_added": 525,
+  "stations_dropped": {
+   "old": 11,
+   "new": 0
+  },
+  "stations_new_kept": 525,
+  "stations_total": 771,
+  "marked_share": {
+   "source": 0.8366,
+   "pass1": 0.1639,
+   "pass2": 0.013
+  },
+  "marked_limit": 0.1,
+  "passes": [
+   {
+    "pass": 1,
+    "planned": 411,
+    "dropped": 9,
+    "stations": 659,
+    "assignment": {
+     "road": 17988,
+     "air": 810,
+     "air_far": 0
+    },
+    "marked_share": 0.1639
+   },
+   {
+    "pass": 2,
+    "planned": 114,
+    "dropped": 2,
+    "stations": 771,
+    "assignment": {
+     "road": 17988,
+     "air": 810,
+     "air_far": 0
+    },
+    "marked_share": 0.013
+   }
+  ],
+  "buildings_without_road": {
+   "air_le_600m": 810,
+   "air_gt_600m": 0
+  },
+  "nodes_moved": 9823,
+  "rule": {
+   "max_buildings": 30,
+   "radius": "max_feeder_m / 1,2",
+   "snap_m": 50.0,
+   "air_max_m": 600.0,
+   "seed": 20261025,
+   "max_passes": 2
+  }
+ }
+}
