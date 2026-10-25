@@ -18,7 +18,7 @@ def test_classify_ignores_halls_and_few_homes():
 
 def test_areas_pinned():
     assert [(a.name, a.max_nn_m, a.cable_share, a.max_feeder_m) for a in AREAS.values()] == [
-        ('stadt', 30.0, 1.0, 500.0), ('ort', 80.0, 0.8, 700.0), ('streu', float('inf'), 0.5, 1000.0)]
+        ('stadt', 35.0, 1.0, 500.0), ('ort', 85.0, 0.8, 700.0), ('streu', float('inf'), 0.5, 1000.0)]
     assert list(AREAS) == ['stadt', 'ort', 'streu']
 
 

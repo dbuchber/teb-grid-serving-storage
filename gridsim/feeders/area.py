@@ -16,9 +16,13 @@ class AreaType:
     max_feeder_m: float   # Grenze längster Strang
 
 
+# Schwellen kalibriert (Plan Task 5 Step 5a, einmalig, danach fest): Startwerte stadt 30 m / ort 80 m ergaben auf
+# prepared-ns einen Kabelanteil nach Trassenlänge von 68,6 % (Ziel 79 %, Band 74–84 %, Netz OÖ 2025). stadt und
+# ort gemeinsam in 5-m-Schritten verschoben: +5 m → 75,3 % (+10 m → 80,7 %, −5 m → 66,8 %). Gewählt ist die
+# kleinste Verschiebung ins Band, +5 m (stadt 35 m, ort 85 m). Nicht weiter nachstellen.
 AREAS = {a.name: a for a in (
-    AreaType('stadt', 30.0, 1.0, 500.0),
-    AreaType('ort', 80.0, 0.8, 700.0),
+    AreaType('stadt', 35.0, 1.0, 500.0),
+    AreaType('ort', 85.0, 0.8, 700.0),
     AreaType('streu', float('inf'), 0.5, 1000.0),
 )}
 
