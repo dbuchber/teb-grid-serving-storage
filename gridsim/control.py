@@ -2,7 +2,8 @@
 
 Steuerlogiken (Spec § 4): ungesteuert; WiNAP = im Winter Start um 23 Uhr, wenn bis 7 Uhr fertig;
 T3d = an Tagen mit Engpassprognose Start zur Gruppenzeit des Haushalts (22/0/2 Uhr), sonst WiNAP.
-Gesteuertes Laden und V2G drosseln nur Wallboxen gegen 100 % Trafo-Bemessung.
+Gesteuertes Laden und V2G drosseln nur Wallboxen gegen 100 % Trafo-Bemessung (Grenzmodus ``trafo``; gegen Trafo
+und Leitungsabschnitte siehe control_lines.py).
 """
 import hashlib
 from datetime import date, timedelta

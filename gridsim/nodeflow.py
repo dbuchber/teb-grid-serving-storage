@@ -11,6 +11,8 @@ sondern je Aufruf (8760, n_s) je Bestandteil.
 - Gesteuert/V2G (Grenzmodus ``trafo``): je Stunde bekommt jeder Knoten den Anteil served/want der Station an
   seinem Bedarf (eigene ungesteuerte Last + eigener Rückstau); der Rückstau je Knoten verfällt wie in
   ``control.controlled`` um 7 Uhr. V2G (netto) anteilig nach Autos je Knoten.
+- Gesteuert/V2G (Grenzmodus ``trafo+leitung``): die Knotenentscheidungen hat ``control_lines.apply`` schon in
+  ``run.flows`` getroffen; sie liegen dünn besetzt in ``f['node_decisions'][s]`` = (Laden, V2G netto).
 """
 from dataclasses import dataclass, replace
 
@@ -91,8 +93,12 @@ def distribute_controlled(raw, served):
     return out.astype(np.float32)
 
 
-def station_block(p, params, f, s: int) -> NodeBlock:
-    """Knotenflüsse der Station ``s`` aus dem Ergebnis ``f`` von ``run.flows`` (siehe Moduldoku)."""
+def base_block(p, params, f, s: int) -> NodeBlock:
+    """Knotenflüsse der Station ``s`` ohne E-Auto und V2G (Haushalt, PV, Wärmepumpe, Speicher).
+
+    Braucht aus ``f`` nur ``heat``, ``seed``, ``storage_idx`` und ``storage_delta``; Grundlage der Steuerung gegen
+    Leitungsgrenzen (control_lines.py), dort ist ``f`` noch unvollständig.
+    """
     st = np.asarray(p.nodes_station)
     nodes = np.flatnonzero(st == s)
     hh = np.asarray(p.nodes_hh, dtype=float)[nodes]
@@ -107,15 +113,25 @@ def station_block(p, params, f, s: int) -> NodeBlock:
     sel = np.flatnonzero(st[sidx] == s) if len(sidx) else np.zeros(0, int)
     if len(sel):
         storage_kw[:, np.searchsorted(nodes, sidx[sel])] = f['storage_delta'][:, sel]
+    zero = np.zeros((HOURS, len(nodes)), dtype=np.float32)
+    return NodeBlock(hh_kw=hh_kw, pv_kw=pv_kw, wp_kw=wp_kw, storage_kw=storage_kw, ev_kw=zero, v2g_kw=zero.copy(),
+                     nodes=nodes, hh=hh, hh_peak_kw=float(h0.max()))
 
+
+def station_block(p, params, f, s: int) -> NodeBlock:
+    """Knotenflüsse der Station ``s`` aus dem Ergebnis ``f`` von ``run.flows`` (siehe Moduldoku)."""
+    block = base_block(p, params, f, s)
+    nodes = block.nodes
     ev_kw = _ev_nodes(f['ev'], f['start'], s, nodes)
     v2g_kw = np.zeros_like(ev_kw)
-    if params.charging in ('controlled', 'v2g'):
+    lines = f.get('node_decisions') or {}
+    if params.charging in ('controlled', 'v2g') and s in lines:
+        ev_kw, v2g_kw = (np.asarray(m.toarray(), dtype=np.float32) for m in lines[s])
+    elif params.charging in ('controlled', 'v2g'):
         ev_kw = distribute_controlled(ev_kw, f['ev_load'][:, s])
         if params.charging == 'v2g':
             cars = np.asarray(f['cars'], dtype=float)[nodes]
             if cars.sum() > 0:
                 v2g_kw = (np.asarray(f['v2g'][:, s], dtype=float)[:, None] * (cars / cars.sum())[None, :]
                           ).astype(np.float32)
-    return NodeBlock(hh_kw=hh_kw, pv_kw=pv_kw, wp_kw=wp_kw, storage_kw=storage_kw, ev_kw=ev_kw, v2g_kw=v2g_kw,
-                     nodes=nodes, hh=hh, hh_peak_kw=float(h0.max()))
+    return replace(block, ev_kw=ev_kw, v2g_kw=v2g_kw)

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from gridsim import control, legacy, metrics, profiles
+from gridsim import control, control_lines, legacy, metrics, profiles
 from gridsim.data import load_prepared
 from gridsim.feeders.loading import loading_pct, segment_flow
 from gridsim.feeders.prepare import load_feeders
@@ -34,9 +34,10 @@ class RunParams:
     """Einstellung eines Laufs.
 
     ``limits``: Grenzmodus der Steuerung (Spec 4.5), ``'trafo'`` = bisheriges Verhalten (Trafo-Kennzahlen
-    bitgleich), ``'trafo+leitung'`` = Steuerung auch gegen Abschnittsgrenzen. ``netzspeicher``: Netzspeicher am
-    Leitungsengpass (Spec 4.6) an/aus. Beide sind schon Teil von Prüfung und Cache-Schlüssel; das Verhalten von
-    ``'trafo+leitung'`` kommt mit Task 8, das des Netzspeichers mit Task 9, bis dahin rechnen beide wie die Defaults.
+    bitgleich), ``'trafo+leitung'`` = gesteuertes Laden, V2G und T3d auch gegen Abschnittsgrenzen
+    (control_lines.py; ohne Stationsnetze wie ``'trafo'``, vermerkt in ``extra['limits_effective']``).
+    ``netzspeicher``: Netzspeicher am Leitungsengpass (Spec 4.6) an/aus; Verhalten kommt mit Task 9, bis dahin
+    rechnet er wie der Default.
     """
     weather_year: int = 2023
     scenario: str = '2030'
@@ -83,11 +84,13 @@ def seed_of(i):
     return BASE_SEED + 1000 * i
 
 
-def flows(p, params, i):
+def flows(p, params, i, feeders=None):
     """Zwischenschritte eines Seeds: Fluss ohne E-Auto, E-Auto-Last, Endfluss je Station, ungeladene Energie.
 
     ``storage_delta``/``storage_idx``: Wirkung der Heimspeicher je Speicherknoten, ``seed``: Seed des Laufs; beides
-    für Knotenflüsse (nodeflow.py).
+    für Knotenflüsse (nodeflow.py). ``feeders``: Stationsnetze für den Grenzmodus ``'trafo+leitung'``; dann stehen
+    die Knotenentscheidungen von gesteuertem Laden/V2G in ``node_decisions``. ``limits_effective``: tatsächlich
+    gerechneter Grenzmodus (``'trafo'``, wenn Netze fehlen).
     """
     seed = seed_of(i)
     rng = np.random.default_rng(seed)
@@ -97,15 +100,21 @@ def flows(p, params, i):
     base, storage_delta, storage_idx = control.storage_flow(p, params.pv_factor, params.storage, wp_st, wp_sto,
                                                             return_delta=True)
     s = p.n_stations
+    lines = params.limits == 'trafo+leitung' and feeders is not None
+    part = {'heat': heat, 'seed': seed, 'cars': cars, 'storage_delta': storage_delta, 'storage_idx': storage_idx}
     if params.charging == 'winap':
         start = control.start_winap(ev, p.year)
+    elif params.charging == 't3d' and lines:
+        start = control_lines.start_t3d(p, params, part, ev, base, feeders)
     elif params.charging == 't3d':
         start = control.start_t3d_forecast(ev, base, p.kva, p.year)
     else:
         start = control.start_uncontrolled(ev)
     ev_load = control.render(ev, start, s)
-    unmet, v2g = None, np.zeros_like(ev_load)
-    if params.charging in ('controlled', 'v2g'):
+    unmet, v2g, decisions = None, np.zeros_like(ev_load), None
+    if params.charging in ('controlled', 'v2g') and lines:
+        ev_load, v2g, unmet, decisions = control_lines.apply(p, params, part, ev, start, base, feeders)
+    elif params.charging in ('controlled', 'v2g'):
         ev_load, unmet = control.controlled(base, ev_load, p.kva)
         if params.charging == 'v2g':
             cars_st = np.bincount(np.asarray(p.nodes_station), weights=cars, minlength=s)
@@ -115,7 +124,8 @@ def flows(p, params, i):
     flow = np.asarray(base, dtype=float) + ev_load - v2g
     return {'heat': heat, 'cars': cars, 'wp_station': wp_st, 'ev': ev, 'start': start, 'base': base,
             'ev_load': ev_load, 'v2g': v2g, 'flow': flow, 'unmet': unmet,
-            'storage_delta': storage_delta, 'storage_idx': storage_idx, 'seed': seed}
+            'storage_delta': storage_delta, 'storage_idx': storage_idx, 'seed': seed, 'node_decisions': decisions,
+            'limits_effective': 'trafo+leitung' if lines else 'trafo'}
 
 
 NO_FEEDERS = 'none'
@@ -208,13 +218,14 @@ def run_seed(p, params, i, feeders=_FROM_ROOT, feeders_fp=None):
         feeders_fp, feeders = feeders_state(p.root)
     elif feeders is None and feeders_fp is None:
         feeders_fp = NO_FEEDERS
-    f = flows(p, params, i)
+    f = flows(p, params, i, feeders=feeders)
     flow, kva = f['flow'], p.kva
     rows_load = metrics.station_rows(flow, kva, None)
     rows_feed = metrics.station_rows(-flow, kva, None)
     region = metrics.region_kpis(rows_load, rows_feed, f['unmet'], p.n_stations)
     extra, line_region = _line_results(p, f, None if feeders is None else line_kpis(p, params, f, feeders))
     region.update(line_region)
+    extra['limits_effective'] = f['limits_effective']
     daily_max = flow[:flow.shape[0] // 24 * 24].reshape(-1, 24, flow.shape[1]).max(axis=1)
     return SeedResult(index=i, seed=seed_of(i), region=region,
                       station_load_kw_max=[round(float(x), 1) for x in flow.max(axis=0)],
