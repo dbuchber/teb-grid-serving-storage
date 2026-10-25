@@ -76,6 +76,7 @@ class SeedResult:
     worst_day: list
     runtime_s: float = 0.0
     extra: dict = field(default_factory=dict)
+    feeders_fp: str = None   # Fingerabdruck der Stationsnetze (feeders_fingerprint), None = unbekannt
 
 
 def seed_of(i):
@@ -117,14 +118,35 @@ def flows(p, params, i):
             'storage_delta': storage_delta, 'storage_idx': storage_idx, 'seed': seed}
 
 
+NO_FEEDERS = 'none'
+
+
+def feeders_fingerprint(root):
+    """Fingerabdruck von ``root/feeders/``: sha256 über ``index.json``, ``manifest.json`` und alle Stationsdateien.
+
+    ``'none'`` ohne Verzeichnis. Geht in jedes Seed-Ergebnis und ins Lauf-Manifest ein; Cache-Einträge mit anderem
+    Fingerabdruck werden nicht wiederverwendet (neue Bemessungsregel oder neu angelegte Netze → neu rechnen).
+    """
+    d = None if root is None else Path(root) / 'feeders'
+    if d is None or not (d / 'index.json').exists():
+        return NO_FEEDERS
+    h = hashlib.sha256()
+    for f in [d / 'index.json', d / 'manifest.json', *sorted(d.glob('*.npz'))]:
+        if f.exists():
+            h.update(f.name.encode() + b'\0')
+            h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
 @lru_cache(maxsize=2)
-def _feeders_at(root):
+def _feeders_at(root, fingerprint):
     return load_feeders(root)
 
 
-def feeders_of(p):
-    """Stationsnetze zu ``p`` aus ``p.root/feeders/`` (je Prozess einmal geladen); None ohne Verzeichnis."""
-    return None if p.root is None else _feeders_at(str(Path(p.root).resolve()))
+def feeders_state(root):
+    """(Fingerabdruck, Stationsnetze) zu ``root``; Netze je Prozess und Fingerabdruck einmal geladen, None ohne."""
+    fp = feeders_fingerprint(root)
+    return fp, (None if fp == NO_FEEDERS else _feeders_at(str(Path(root).resolve()), fp))
 
 
 def line_kpis(p, params, f, feeders):
@@ -175,14 +197,17 @@ def _line_results(p, f, kpis):
 _FROM_ROOT = object()
 
 
-def run_seed(p, params, i, feeders=_FROM_ROOT):
+def run_seed(p, params, i, feeders=_FROM_ROOT, feeders_fp=None):
     """Ein Seed: Trafo-Kennzahlen wie bisher, dazu Leitungskennzahlen, wenn es Stationsnetze gibt.
 
-    ``feeders``: Ergebnis von ``load_feeders`` (None = ohne Leitungen); ohne Angabe aus ``p.root/feeders/``.
+    ``feeders``: Ergebnis von ``load_feeders`` (None = ohne Leitungen) mit ``feeders_fp`` als Fingerabdruck;
+    ohne Angabe beides aus ``p.root/feeders/``.
     """
     t = time.perf_counter()
     if feeders is _FROM_ROOT:
-        feeders = feeders_of(p)
+        feeders_fp, feeders = feeders_state(p.root)
+    elif feeders is None and feeders_fp is None:
+        feeders_fp = NO_FEEDERS
     f = flows(p, params, i)
     flow, kva = f['flow'], p.kva
     rows_load = metrics.station_rows(flow, kva, None)
@@ -196,7 +221,7 @@ def run_seed(p, params, i, feeders=_FROM_ROOT):
                       station_congestion_h=[r['engpass_h_jahr'] if r else 0 for r in rows_load],
                       station_feed_h=[r['engpass_h_jahr'] if r else 0 for r in rows_feed],
                       worst_day=[int(x) for x in daily_max.argmax(axis=0)],
-                      runtime_s=round(time.perf_counter() - t, 2), extra=extra)
+                      runtime_s=round(time.perf_counter() - t, 2), extra=extra, feeders_fp=feeders_fp)
 
 
 def code_version():
@@ -213,24 +238,30 @@ def _seed_path(cache_dir, params, i):
     return Path(cache_dir) / params.key() / f'seed_{i}.json'
 
 
-def cached_seeds(cache_dir, params):
+def cached_seeds(cache_dir, params, feeders_fp):
+    """Gecachte Seeds der Einstellung, die mit den Stationsnetzen ``feeders_fp`` (``feeders_fingerprint``) gerechnet
+    wurden; andere bleiben liegen und werden beim Neurechnen überschrieben."""
     out = []
     for i in range(params.n_seeds):
         path = _seed_path(cache_dir, params, i)
         if path.exists():
             try:
-                out.append(SeedResult(**json.loads(path.read_text())))
+                r = SeedResult(**json.loads(path.read_text()))
             except (ValueError, TypeError):  # abgebrochen geschrieben: neu rechnen
                 path.unlink(missing_ok=True)
+                continue
+            if r.feeders_fp == feeders_fp:
+                out.append(r)
     return out
 
 
-def _write_manifest(cache_dir, root, params, runtime):
+def _write_manifest(cache_dir, root, params, runtime, feeders_fp):
     d = Path(cache_dir) / params.key()
     prep = Path(root) / str(params.weather_year) / 'manifest.json'
     manifest = {'params': asdict(params), 'model_version': MODEL_VERSION, 'code_version': code_version(), 'legacy_frozen_at': legacy.FROZEN_AT,
                 'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),
                 'prepared_manifest_sha256': hashlib.sha256(prep.read_bytes()).hexdigest() if prep.exists() else None,
+                'feeders_fingerprint': feeders_fp,
                 'seeds': [seed_of(i) for i in range(params.n_seeds)], 'runtime_s': round(runtime, 1)}
     (d / 'manifest.json').write_text(json.dumps(manifest, indent=1))
 
@@ -240,18 +271,19 @@ _WORKER = {}
 
 def _init(root, year):
     _WORKER['p'] = load_prepared(root, year)
-    _WORKER['feeders'] = load_feeders(root)   # einmal je Prozess, nicht je Seed
+    _WORKER['feeders_fp'], _WORKER['feeders'] = feeders_state(root)   # einmal je Prozess, nicht je Seed
 
 
 def _work(params, i):
-    return run_seed(_WORKER['p'], params, i, feeders=_WORKER['feeders'])
+    return run_seed(_WORKER['p'], params, i, feeders=_WORKER['feeders'], feeders_fp=_WORKER['feeders_fp'])
 
 
 def run_many(root, params, workers=4, cache_dir=None):
-    """Alle Seeds der Einstellung, in Fertigstellungsreihenfolge; Gecachtes zuerst."""
+    """Alle Seeds der Einstellung, in Fertigstellungsreihenfolge; Gecachtes (gleicher Netzstand) zuerst."""
     params.validate()
     t = time.perf_counter()
-    done = {r.index: r for r in cached_seeds(cache_dir, params)} if cache_dir else {}
+    fp = feeders_fingerprint(root)
+    done = {r.index: r for r in cached_seeds(cache_dir, params, fp)} if cache_dir else {}
     yield from done.values()
     todo = [i for i in range(params.n_seeds) if i not in done]
     if todo:
@@ -269,7 +301,7 @@ def run_many(root, params, workers=4, cache_dir=None):
                     os.replace(tmp, path)  # atomar: Leser sehen nie eine halbe Datei
                 yield r
         if cache_dir:
-            _write_manifest(cache_dir, root, params, time.perf_counter() - t)
+            _write_manifest(cache_dir, root, params, time.perf_counter() - t, fp)
 
 
 def band(results, key):

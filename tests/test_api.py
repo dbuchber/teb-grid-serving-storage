@@ -15,7 +15,7 @@ def fake_result(i):
     return SeedResult(index=i, seed=seed_of(i), region={'stations_load_congestion': i, 'e_net_mwh': float(i),
                       'storage_units': i, 'trafo_plus1': 0, 'trafo_plus2': 0, 'trafo_over_1000': 0},
                       station_load_kw_max=[1.0, 2.0, 3.0], station_congestion_h=[i, 0, 0], station_feed_h=[0, 0, 0],
-                      worst_day=[1, 2, 3])
+                      worst_day=[1, 2, 3], feeders_fp='none')
 
 
 class FakeRunner:
@@ -123,6 +123,22 @@ def test_sse_replay_cached(make, tmp_path):
             if line.startswith('event:'):
                 events.append(line.split(':', 1)[1].strip())
     assert events == ['seed', 'seed', 'seed', 'done']
+
+
+def test_cached_seeds_with_other_feeders_state_are_recomputed(make, tmp_path):
+    """Fix-Runde 1 Task 7: Cache aus einem anderen Netzstand gilt nicht als fertig."""
+    runner = FakeRunner()
+    client, _ = make(runner=runner)
+    from dataclasses import asdict, replace
+    from gridsim.run import RunParams
+    cache = tmp_path / 'cache' / RunParams(**BODY).key()
+    cache.mkdir(parents=True, exist_ok=True)
+    for i in range(3):
+        (cache / f'seed_{i}.json').write_text(json.dumps(asdict(replace(fake_result(i), feeders_fp='abc'))))
+    r = client.post('/api/runs', json=BODY).json()
+    assert r['status'] != 'cached'
+    wait_done(client, r['run_id'])
+    assert len(runner.calls) == 1
 
 
 def test_day_unknown_station_404(make):

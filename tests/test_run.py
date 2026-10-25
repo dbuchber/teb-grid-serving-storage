@@ -50,7 +50,7 @@ def test_run_many_yields_all_seeds(tmp_path):
     assert sorted(f.name for f in (cache / key).glob('seed_*.json')) == ['seed_0.json', 'seed_1.json', 'seed_2.json']
     manifest = json.loads((cache / key / 'manifest.json').read_text())
     assert manifest['params']['charging'] == 'uncontrolled' and 'legacy_sha256sums' in manifest
-    assert [r.index for r in cached_seeds(cache, params())] == [0, 1, 2]
+    assert [r.index for r in cached_seeds(cache, params(), 'none')] == [0, 1, 2]
     again = list(run_many(root, params(), workers=2, cache_dir=cache))  # aus dem Cache
     assert [r.region for r in sorted(again, key=lambda r: r.index)] == [r.region for r in sorted(got, key=lambda r: r.index)]
 
@@ -61,7 +61,7 @@ def test_corrupt_seed_file_is_skipped(tmp_path):
     cache = tmp_path / 'cache'
     list(run_many(root, params(), workers=1, cache_dir=cache))
     (cache / params().key() / 'seed_1.json').write_text('{"index": 1, "se')
-    assert [r.index for r in cached_seeds(cache, params())] == [0, 2]
+    assert [r.index for r in cached_seeds(cache, params(), 'none')] == [0, 2]
     again = list(run_many(root, params(), workers=1, cache_dir=cache))
     assert sorted(r.index for r in again) == [0, 1, 2]
     assert not list((cache / params().key()).glob('*.tmp'))
@@ -204,3 +204,85 @@ def test_line_overload_reaches_region(prepared_with_feeders):
                                                                  rel=1e-3)
     for k in REFERENCE['results']['default']['uncontrolled']['0']['region']:
         assert r.region[k] == base.region[k], k
+
+
+# --- Fix-Runde 1: Netzstand im Cache ---------------------------------------------------------------------------------
+
+def _make_feeders(prepared):
+    """``feeders/`` für ein Fake-prepared (2012 und 2023 vorhanden) wie in ``prepared_with_feeders``."""
+    from fakes import align_station_positions, fake_build_members_factory, fake_roads
+    from gridsim import legacy
+    from gridsim.feeders.prepare import prepare_feeders
+    build = fake_build_members_factory()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(legacy.load('steyr_sim_variant_a'), 'build_members', build)
+        inp = prepared.parent / 'input'
+        inp.mkdir(exist_ok=True)
+        fake_roads(inp / 'osm_roads.json')
+        align_station_positions(prepared, build)
+        prepare_feeders(inp, prepared)
+
+
+def _weaken_feeders(prepared, factor):
+    """Grenzströme aller Stationsdateien skalieren und den Index neu schreiben (anderer Inhalt, gleiche Struktur)."""
+    import numpy as np
+    d = prepared / 'feeders'
+    for f in d.glob('*.npz'):
+        z = dict(np.load(f))
+        z['i_max_a'] = z['i_max_a'] * factor
+        np.savez_compressed(f, **z)
+
+
+def test_feeders_fingerprint(tmp_path):
+    from gridsim.run import feeders_fingerprint
+    root = tmp_path / 'prep'
+    write_fake_prepared(root, 2012)
+    write_fake_prepared(root, 2023)
+    assert feeders_fingerprint(root) == 'none' and feeders_fingerprint(None) == 'none'
+    _make_feeders(root)
+    a = feeders_fingerprint(root)
+    assert a != 'none' and feeders_fingerprint(root) == a
+    _weaken_feeders(root, 0.5)
+    assert feeders_fingerprint(root) not in ('none', a)
+
+
+def test_cache_follows_feeders_state(tmp_path):
+    """Review Fix 1: Cache ohne Netze, dann Netze anlegen → neu rechnen; Netze ändern → wieder neu rechnen."""
+    root = tmp_path / 'prep'
+    write_fake_prepared(root, 2012)
+    write_fake_prepared(root, 2023)
+    cache = tmp_path / 'cache'
+    pr = params(n_seeds=1, scenario='2040', pv_factor=2.0)
+    first = list(run_many(root, pr, workers=1, cache_dir=cache))[0]
+    assert first.extra['station_line_max_pct'] is None and first.feeders_fp == 'none'
+    assert len(cached_seeds(cache, pr, 'none')) == 1
+
+    _make_feeders(root)
+    second = list(run_many(root, pr, workers=1, cache_dir=cache))[0]
+    assert second.extra['station_line_max_pct'] is not None and second.feeders_fp not in ('none', None)
+    assert cached_seeds(cache, pr, 'none') == []
+    manifest = json.loads((cache / pr.key() / 'manifest.json').read_text())
+    assert manifest['feeders_fingerprint'] == second.feeders_fp
+
+    _weaken_feeders(root, 0.3)
+    third = list(run_many(root, pr, workers=1, cache_dir=cache))[0]
+    assert third.feeders_fp != second.feeders_fp
+    assert max(third.extra['station_line_max_pct']) > max(second.extra['station_line_max_pct']) * 3
+    again = list(run_many(root, pr, workers=1, cache_dir=cache))[0]   # jetzt aus dem Cache
+    assert again.extra == third.extra and again.runtime_s == third.runtime_s
+
+
+def test_run_seed_direct_sees_new_feeders(tmp_path):
+    """Review Fix 2: der Prozess-Cache der Netze hängt am Fingerabdruck, nicht nur am Pfad."""
+    root = tmp_path / 'prep'
+    write_fake_prepared(root, 2012)
+    write_fake_prepared(root, 2023)
+    p = load_prepared(root, 2023)
+    assert run_seed(p, params(), 0).extra['station_line_max_pct'] is None
+    _make_feeders(root)
+    a = run_seed(p, params(), 0)
+    assert a.extra['station_line_max_pct'] is not None
+    _weaken_feeders(root, 0.5)
+    b = run_seed(p, params(), 0)
+    assert b.feeders_fp != a.feeders_fp
+    assert max(b.extra['station_line_max_pct']) == pytest.approx(2 * max(a.extra['station_line_max_pct']), rel=1e-2)
