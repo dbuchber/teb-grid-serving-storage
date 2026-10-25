@@ -1,34 +1,95 @@
 # Abnahme NS-Leitungen in gridsim (25.10.2026)
 
 Abnahmelauf nach Spec `docs/superpowers/specs/2026-10-25-ns-leitungen-design.md` § 6 auf hetzner, Stand
-`feat/ns-leitungen`, `MODEL_VERSION` `2026-10-26.2` (Fix-Runde 1: neue Bemessungsregel, siehe unten). Der erste Lauf
-mit der Regel aus Spec 4.3 (`MODEL_VERSION` `2026-10-26.1`) ist verworfen und steht am Ende als eigener Abschnitt. Alle Zahlen sind
+`feat/ns-leitungen`, `MODEL_VERSION` `2026-10-26.3` (Fix-Runde 2: Ist-Abgleich „heute“ und Mindestquerschnitt, auf der Bemessungsregel
+von Fix-Runde 1). Der zweite Lauf (Fix-Runde 1, `2026-10-26.2`) und der erste Lauf (Regel aus Spec 4.3,
+`2026-10-26.1`) sind verworfen und stehen am Ende als eigene Abschnitte. Alle Zahlen sind
 Modellwerte aus einem **synthetischen** Niederspannungsnetz, keine Messungen.
 
-## Kurzfassung (Fix-Runde 1)
+## Kurzfassung (Fix-Runde 2)
 
-- **Die Abnahmegrenze „heute“ ist auch mit der neuen Bemessungsregel nicht bestanden**, aber deutlich näher:
-  Auf der neu gebauten Variante `prepared-ns-fix1` (487 Stationen) liegen im P90 über 20 Seeds **29 Stationen über
-  100 %** und **5 über 120 %** (Regel: höchstens 5 von 487 über 100 %, keine über 120 %). Erster Lauf: 105 und 63.
-  Keine weitere Regeländerung durch den Umsetzer; die Vergleichsmatrix wurde nach Vorgabe nicht neu gerechnet.
-- **Markierte Abgänge überschreiten die 10-%-Grenze:** 51 von 487 Stationen (10,5 %) haben einen markierten
-  Abgang, davon 42 mit scheiternder Bemessung (die schwerere Auslegungslast reicht auch für 2 × NAYY 4x240 nicht).
-  Nach Spec Entscheidung 7 und den Global Constraints ist das ein Haltepunkt mit Rückfrage an den Owner.
-- **Rest-Ursache:** 25 der 29 Stationen liegen im Gebietstyp stadt, 4 in ort. Am schlimmsten Abschnitt liegen im
-  Median 106 kW an, ausgelegt sind 91 kW, die Grenze ist 97 kW; meist nur 2 Überlaststunden im Jahr. Der
-  Haushaltsteil passt jetzt (53 kW gegen 54,5 kW Auslegung). Zu niedrig bleiben die E-Autos und die Wärmepumpen:
-  - E-Autos: 32 kW in der Bewertung gegen etwa 11 kW Auslegung. p_ev(k) aus Smart-Meter-Daten setzt viel weniger
-    Gleichzeitigkeit an als gridsims ungesteuertes Laden mit 11 kW nach der Ankunft am Abend.
-  - Wärmepumpen: 48 kW gegen etwa 26 kW Auslegung. Die Regel rechnet mit der mittleren WP-Leistung der
-    berechtigten Knoten, ein Seed trifft oft große Wärmepumpen in Mehrfamilienhäusern.
-- Netzbau: Kabelanteil nach Trassenlänge 74,7 % (Band 74–84 %). NAYY 4x50 im Strang sinkt von 46 % auf 29 %,
-  4x150 und 4x240 steigen auf 18 % und 23 %.
-- Die Zusatzstationen wurden mit der neuen Regel neu bestimmt, weil die schwerere Auslegung mehr Abgänge markiert:
-  266 geplant, 231 behalten, 487 statt 465 Stationen.
-- Nebenbei behoben: Die Abnahmeregel im Bericht ist „5 von n Stationen“ (nicht 5 von 257); das Dashboard nimmt die
-  Stationszahl aus der API (Überschrift und Kachel „Transformers overloaded“).
+- **Die Abnahmegrenze „heute“ ist knapp nicht bestanden:** Auf `prepared-ns-fix2` (508 Stationen) liegen im P90
+  über 20 Seeds **6 Stationen über 100 %** und **keine über 120 %**. Die Regel erlaubt höchstens 5 von 508. Alle 6
+  liegen nur im Kältejahr 2012 darüber (P90 100,0–108,4 %); 2017 und 2023 liegt keine Station über 100 %. Nach
+  Vorgabe keine eigene Regeländerung, keine Vergleichsmatrix, keine neue Dashboard-Prüfung.
+- **Markierte Abgänge:** 50 von 508 Stationen (9,8 %), innerhalb der 10-%-Grenze.
+- **Ist-Abgleich „heute“:**
+  - E-Autos: 0,076 je Haushalt. Statistik Austria zählt 51 343 Elektro-Pkw in OÖ (31.12.2025), dem stehen
+    672 647 Privathaushalte gegenüber. Bisher galten 0,08 aus legacy.
+  - Wärmepumpen: 21,4 % der Hauptwohnsitze in OÖ heizen mit „Solar, Wärmepumpen“ (Statistik Austria,
+    MZ Energieeinsatz der Haushalte 2023/24). Bisher galten 15 %; im Modell steht jetzt `wp_share` 0,23, was
+    haushaltsgewichtet 21,4 % ergibt.
+  - Eine Quelle für den Anteil der 11-kW-Wallboxen gibt es nicht; es bleibt bei 70 %.
+- **Trafo-Kennzahlen heute,** Stationen mit Trafo-Engpass (Median) auf `prepared-ns-fix2`, alte Anteile → neue:
+  2012: 2 → 11, 2017: 0,5 → 3, 2023: 0 → 1,5.
+- **Mindestquerschnitt** im Strang in stadt und ort: NAYY 4x150 bzw. Al 4x95. NAYY 4x50 sinkt auf 3 % des
+  Strangs, NAYY 4x150 steigt auf 47 %.
+- **Rest-Ursache:** Die 6 Stationen (5 stadt, 1 ort) sind an einem Strang-Abschnitt NAYY 4x150 (4) bzw. 4x240 (2)
+  mit 13–27 Gebäuden überlastet, im Median 3 Stunden im Jahr, an Abenden im Februar 2012.
+  - Anteile im Median: Wärmepumpen 135 kW, Haushalte 52 kW, E-Autos 11 kW; zusammen 196 kW.
+  - Auslegung 181 kW, Grenze 185 kW.
+  - Ausschlaggebend sind die Wärmepumpen in der Kältewelle: 9 Knoten mit WP gegen k ganze WP × mittlere Leistung
+    in der Auslegung.
 
-## Bemessungsregel nach Fix-Runde 1 (Ruling des Controllers, 25.10.2026)
+## Ist-Abgleich „heute“ (Owner-Entscheidung, Fix-Runde 2)
+
+Die realen Kabel tragen die heutige Last; deshalb muss das Modell für „heute“ halten. Geprüft wurden die
+Anteile von E-Autos und Wärmepumpen, die gridsim für „heute“ zieht (`profiles.assign`). Der frühere Stand
+`legacy/steyr_wp_ev.SCENARIOS['heute']` = 15 % WP, 0,08 E-Autos je Haushalt bleibt unverändert (SHA256SUMS); die
+neuen Werte stehen als Override in `gridsim/profiles.SCENARIOS['heute']`. 2030, 2040 und 2040m sind unverändert.
+
+| Größe | Quelle (Abruf 25.10.2026) | Stand | Wert | Modell |
+|---|---|---|---|---|
+| Elektro-Pkw OÖ | Statistik Austria, „Kfz-Bestand nach Bundesland und Kraftstoffart bzw. Energiequelle 2025“, https://www.statistik.at/fileadmin/pages/75/Kfz-BestandKraftfahrzeugBundeslandKraftstoffartEnergiequelle2025.ods (Zeile Oberösterreich / Personenkraftwagen Klasse M1, Spalte Elektro) | 31.12.2025 | 51 343 von 1 000 719 Pkw (5,1 %) | – |
+| Pkw Stadt Steyr / Steyr-Land | Statistik Austria, „Kfz-Bestand 2025“, Tabelle 7, https://www.statistik.at/fileadmin/pages/75/kfz-bestand_2025.ods | 31.12.2025 | 22 694 / 42 880 Pkw; Elektro je Bezirk nicht veröffentlicht (nur STATcube) | – |
+| Privathaushalte OÖ | Statistik Austria, Haushaltsprognose, wiedergegeben von WKÖ, https://www.wko.at/statistik/bundesland/PrivathaushPrognose.pdf; Mikrozensus 2024: 672 976 (https://www.wko.at/statistik/bundesland/Privathaush.pdf) | 2025 | 672 647 | – |
+| **E-Autos je Haushalt** | eigene Rechnung: 51 343 / 672 647 | 2025 | **0,076** | `ev_share` 0,076 (bisher 0,08) |
+| Heizsystem Hauptwohnsitze OÖ | Statistik Austria, „Primäres Heizsystem nach überwiegend eingesetztem Energieträger und Art der Heizung 2003 bis 2024“, Blatt Oberösterreich, https://www.statistik.at/fileadmin/pages/100/08Heizungen2003Bis2024NachBundeslaendernUndVerwendetemEnergietraeger.ods (MZ Energieeinsatz der Haushalte 2023/2024, erstellt 14.05.2025) | Winter 2023/24 | „Solar, Wärmepumpen“ 142 397 von 666 900 Wohnungen = **21,4 %**; Fernwärme 223 656 (33,5 %) | `wp_share` 0,23 (bisher 0,15) |
+| Anteil 11-kW-Wallboxen | keine Quelle gefunden | – | – | unverändert 0,7 |
+
+Umrechnung und Annahmen:
+
+- **E-Autos:** Bezirkswerte für Elektro-Pkw veröffentlicht Statistik Austria nur in STATcube, nicht als Datei;
+  der Katalog auf hetzner (data.gv.at-Spiegel, `infra-kg-db-1`) hat für Steyr keinen Kfz-Bestand nach
+  Antrieb. Daher gilt der OÖ-Wert. Gegenprobe:
+  - Mit dem OÖ-Anteil von 5,1 % an den Pkw in Stadt Steyr und Steyr-Land (65 574 Pkw) ergeben sich etwa
+    3 360 Elektro-Pkw. Im Modell sind es 0,076 × 42 210 Haushalte ≈ 3 210; das modellierte Gebiet ist kleiner
+    als beide Bezirke.
+  - Die Stadt Steyr hat weniger Pkw je Einwohner als OÖ (598 gegen 651 je 1 000; Tabelle 6). Der Wert ist eher
+    eine Obergrenze für die Stadt.
+  - Bestand und Haushalte stammen aus verschiedenen Quellen (Kfz-Statistik 31.12.2025, Haushaltsprognose 2025).
+- **Wärmepumpen:**
+  - Die Kategorie der Statistik heißt „Solar, Wärmepumpen“; Solarthermie als primäres Heizsystem ist selten.
+  - gridsim zieht Wärmepumpen je Wohngebäude, ohne Fernwärme-Gebäude (`p_wp = wp_share / (1 − Fernwärmeanteil
+    der Gebäude)`), und kann damit Haushalte in Mehrfamilienhäusern nur gemeinsam treffen.
+  - Im Modellgebiet (42 210 Haushalte, 12,4 % mit Fernwärme) ergibt `wp_share` 0,23 einen erwarteten Anteil von
+    21,4 % der Haushalte mit Wärmepumpe (0,15 ergab 14,0 %).
+  - Der OÖ-Wert enthält Linz mit viel Fernwärme. Unter den Haushalten ohne Fernwärme wären es in OÖ 32 %, im
+    Modell jetzt 24 %. Gewählt ist der Anteil an allen Haushalten, wie die Statistik ihn ausweist.
+- **Wallboxen:** Ohne Quelle bleibt der Anteil 11 kW bei 70 % (legacy `EV_FAST_SHARE`). Die Bemessung rechnet
+  ohnehin mit 11 kW je Auto (p_ev(1)).
+
+Wirkung auf die Trafo-Kennzahlen heute (`prepared-ns-fix2`, ungesteuert, 20 Seeds, Median mit Band 10–90 %):
+
+| Wetterjahr | Trafo-Engpass, alte Anteile (0,15 / 0,08) | Trafo-Engpass, Ist-Abgleich (0,23 / 0,076) | E_netto MWh alt → neu | Trafo +1 alt → neu |
+|---|---|---|---|---|
+| 2012 | 2 (1–5) | **11** (7–17) | 0,06 → 0,95 | 2 → 10 |
+| 2017 | 0,5 (0–1) | **3** (1–5) | 0,00 → 0,07 | 0,5 → 3 |
+| 2023 | 0 (0–1) | **1,5** (0–4) | 0,00 → 0,03 | 0 → 1 |
+
+Die alten Werte sind ohne Cache mit den legacy-Anteilen gerechnet (`out/heute-old-shares-fix2.json` auf hetzner).
+Das sind immer noch wenige Trafos (2 % der 508 Stationen im Kältejahr). Mit 11 überlasteten Trafos in 2012 liegt
+das Modell aber deutlich über dem Bild „heute praktisch kein Trafo überlastet“.
+
+## Mindestquerschnitt (Fix-Runde 2)
+
+In den Gebietstypen stadt und ort bekommt jeder Strangabschnitt mindestens NAYY 4x150 (Kabel) bzw. Al 4x95
+(Freileitung); streu und Hausanschlüsse sind unverändert. Höhere Last oder Spannungsfall setzen den Abschnitt
+weiter hoch wie bisher. Umsetzung: `gridsim/feeders/sizing.py` (`MIN_TRUNK`), Tests
+`test_minimum_trunk_section_in_stadt_and_ort` und `test_minimum_section_still_upgrades_for_load`. Das entspricht
+üblicher Praxis für neue Ortsnetze, ist aber nicht aus Steyr-Daten belegt (siehe „Grenzen der Aussage“).
+
+## Bemessungsregel (seit Fix-Runde 1, Ruling des Controllers, 25.10.2026)
 
 Ersetzt die Auslegungslast aus Spec 4.3 / Entscheidung 5; die Abnahmegrenze bleibt unverändert. Umsetzung in
 `gridsim/feeders/sizing.py::design_flows` und `gridsim/feeders/prepare.py::design_loads`. Je Abschnitt mit n
@@ -39,119 +100,101 @@ Haushalten und m WP-berechtigten Gebäuden dahinter:
   (die Abendspitze im Winter, die die Bewertung trifft). Das ergibt 0,79 kW je Haushalt; der Wert ist nicht im
   Code festgeschrieben.
 - **Wärmepumpen:** k = P90 Binomial(m, p_wp) ganze Geräte (`scipy.stats.binom.ppf(0.9, m, p_wp)`). p_wp ist wie in
-  `profiles.assign` der Anteil „heute“ 15 % geteilt durch den Anteil der Wohngebäude ohne Fernwärme, gezogen je
+  `profiles.assign` der Anteil „heute“ (seit Fix-Runde 2: 23 %) geteilt durch den Anteil der Wohngebäude ohne Fernwärme, gezogen je
   berechtigtem Gebäude. Gerechnet wird k × mittlere elektrische Leistung der berechtigten Knoten dahinter, in der
   kältesten Stunde ihrer Zelle (`profiles.heat_pump_kw`, Versatz 0). Alle laufen gleichzeitig, so wie gridsim die
   kälteste Stunde ohne Versatz rechnet.
-- **E-Autos:** k = P90 Binomial(n, ev_share). ev_share ist 8 %, wie `profiles.assign` je Haushalt zieht. Gerechnet
+- **E-Autos:** k = P90 Binomial(n, ev_share). ev_share ist der Anteil „heute“ je Haushalt (seit Fix-Runde 2: 0,076), wie `profiles.assign` ihn zieht. Gerechnet
   wird k · p_ev(k): volle Wallbox-Leistung 11 kW bei k = 1, darüber der Gleichzeitigkeitsfaktor nach Maier/Groiß.
 - Einspeisung und Planungsgrenzen sind unverändert.
-- `MODEL_VERSION` steht auf `2026-10-26.2`.
 - Tests:
   - `test_household_term_at_least_h0_peak`
   - `test_devices_binomial_p90`
   - `test_design_flows_without_homes_or_devices`
   - `test_design_loads_heute` (angepasst)
 
-## Plausibilität des Netzbaus (`prepared-ns-fix1`)
+## Plausibilität des Netzbaus (`prepared-ns-fix2`)
 
 `gridsim prepare-feeders --input …/steyr-pv-2026-10-24/input --prepared prepared --extra-stations --out
-prepared-ns-fix1`, ausgeführt wie beim ersten Lauf (30 s auf hetzner). `prepared/` (ohne Zusatzstationen) wurde
-nicht neu gebaut: Diese Variante hat über 50 % markierte Abgänge und ist kein Abnahmekandidat.
+prepared-ns-fix2` (fix1 bleibt unverändert erhalten).
 
-| Kennzahl | Fix-Runde 1 | erster Lauf | Ziel |
-|---|---|---|---|
-| Stationen | 487 | 465 | – |
-| Kabelanteil nach Trassenlänge (Abnahmegröße) | 74,7 % | 74,3 % | 79 % (Band 74–84 %) |
-| Kabelanteil nach Kabellänge | 70,0 % | 72,2 % | nur Information |
-| NS-Trasse je Station | 1,98 km | 2,06 km | ca. 2,7 km |
-| NS-Kabellänge je Station (Systeme einzeln) | 3,25 km | 3,10 km | ca. 2,7 km |
-| Abgänge je Station (Mittel / Median) | 4,28 / 3 | 4,36 / 3 | 3,4–3,8 |
-| Wohngebäude je Station (Mittel) | 37,1 | 38,8 | ca. 58 |
-| Trasse je Wohngebäude | 53,3 m | 52,9 m | ca. 46 m |
-| Stationen mit markiertem Abgang | **51 (10,5 %)** | 29 (6,2 %) | ≤ 10 % |
-| davon zu lang / Bemessung scheitert (Stationen) | 13 / 42 | 11 / 20 | – |
-| Ausläufer (Abgänge an Stationen) | 376 an 194 | 398 an 203 | – |
-| Gebietstypen stadt / ort / streu | 145 / 239 / 103 | 142 / 227 / 96 | – |
+| Kennzahl | Fix-Runde 2 | Fix-Runde 1 (verworfen) | erster Lauf (verworfen) | Ziel |
+|---|---|---|---|---|
+| Stationen | 508 | 487 | 465 | – |
+| Kabelanteil nach Trassenlänge (Abnahmegröße) | 75,0 % | 74,7 % | 74,3 % | 79 % (Band 74–84 %) |
+| NS-Trasse je Station | 1,90 km | 1,98 km | 2,06 km | ca. 2,7 km |
+| NS-Kabellänge je Station (Systeme einzeln) | 3,02 km | 3,25 km | 3,10 km | ca. 2,7 km |
+| Abgänge je Station (Mittel) | 4,14 | 4,28 | 4,36 | 3,4–3,8 |
+| Stationen mit markiertem Abgang | **50 (9,8 %)** | 51 (10,5 %) | 29 (6,2 %) | ≤ 10 % |
+| davon zu lang / Bemessung scheitert (Stationen) | 9 / 45 | 13 / 42 | 11 / 20 | – |
 
 Typverteilung (km, parallele Systeme einzeln; Anteil am Strang bzw. an den Hausanschlüssen):
 
-| Typ | Fix-Runde 1 km | Anteil | erster Lauf km | Anteil |
+| Typ | Fix-Runde 2 km | Anteil | Fix-Runde 1 Anteil | erster Lauf Anteil |
 |---|---|---|---|---|
-| NAYY 4x50 | 462,9 | 29,2 % | 663,2 | 46,0 % |
-| NAYY 4x150 | 279,0 | 17,6 % | 175,7 | 12,2 % |
-| NAYY 4x240 | 367,2 | 23,2 % | 200,5 | 13,9 % |
-| Al 4x70 | 119,3 | 7,5 % | 190,7 | 13,2 % |
-| Al 4x95 | 355,3 | 22,4 % | 210,1 | 14,6 % |
-| NAYY 4x35 (Hausanschluss) | 267,4 | 88,4 % | 263,9 | 87,3 % |
-| Al 4x25 (Hausanschluss) | 35,1 | 11,6 % | 38,4 | 12,7 % |
+| NAYY 4x50 | 45,7 | 3,0 % | 29,2 % | 46,0 % |
+| NAYY 4x150 | 718,0 | 46,9 % | 17,6 % | 12,2 % |
+| NAYY 4x240 | 301,7 | 19,7 % | 23,2 % | 13,9 % |
+| Al 4x70 | 53,2 | 3,5 % | 7,5 % | 13,2 % |
+| Al 4x95 | 414,4 | 27,0 % | 22,4 % | 14,6 % |
+| NAYY 4x35 (Hausanschluss) | 269,8 | 89,2 % | 88,4 % | 87,3 % |
+| Al 4x25 (Hausanschluss) | 32,8 | 10,8 % | 11,6 % | 12,7 % |
 
-Zusatzstationen: 266 geplant, 35 kleine wieder aufgelöst, 231 behalten. Der Anteil der Stationen mit markiertem
-Abgang sank von 65,0 % (Ausgangsnetz mit neuer Regel) über 19,0 % (Durchgang 1) auf 10,5 % (Durchgang 2); zwei
-Durchgänge sind das Maximum der Regel. Der Rest geht vor allem auf scheiternde Bemessung zurück (42 Stationen):
-Einzelne Abschnitte nahe der Station tragen mit der schwereren Auslegungslast auch 2 × 4x240 nicht.
+Zusatzstationen: 284 geplant, 32 kleine wieder aufgelöst, 252 behalten (508). Der Anteil der Stationen mit
+markiertem Abgang sank von 66,9 % (Ausgangsnetz) über 21,3 % (Durchgang 1) auf 9,8 % (Durchgang 2).
 
-## Abnahmegrenze „heute“ (Fix-Runde 1)
+## Abnahmegrenze „heute“ (Fix-Runde 2)
 
-Gleiche Einstellung wie im ersten Lauf: heute, PV 1,0, Speicher base, ungesteuert, `trafo`, ohne Netzspeicher,
-2012/2017/2023, je 20 Seeds. 8 Worker, je Wetterjahr etwa 90 s; Cache `cache-fix1/`.
+Gleiche Einstellung wie zuvor (heute mit den Anteilen aus dem Ist-Abgleich, PV 1,0, Speicher base, ungesteuert,
+`trafo`, ohne Netzspeicher), 2012/2017/2023, je 20 Seeds. 8 Worker, je Wetterjahr etwa 93 s; Cache `cache-fix2/`.
 
 | Wetterjahr | Seeds | Stationen > 100 % | Stationen > 120 % | Median P90 | Max P90 |
 |---|---|---|---|---|---|
-| 2012 | 20 | 29 | 4 | 60,6 % | 137,0 % |
-| 2017 | 20 | 9 | 5 | 55,8 % | 132,5 % |
-| 2023 | 20 | 8 | 3 | 52,4 % | 130,6 % |
-| alle (Maximum je Station) | 20 | **29** | **5** | 60,6 % | 137,0 % |
+| 2012 | 20 | 6 | 0 | 48,8 % | 108,4 % |
+| 2017 | 20 | 0 | 0 | 43,2 % | 98,7 % |
+| 2023 | 20 | 0 | 0 | 40,5 % | 88,7 % |
+| alle (Maximum je Station) | 20 | **6** | **0** | 48,9 % | 108,4 % |
 
-**Ergebnis: nicht bestanden.** Regel: höchstens 5 von 487 Stationen über 100 %, keine über 120 %. Über 120 % liegen
-die Stationen 3, 60, 181, 337 und 344, alle im Gebietstyp stadt (P90 121–137 %). Der Median aller Werte je Station
-sinkt nur wenig (69 % → 61 %), die Spitzen aber stark (Max 203 % → 137 %). Die Trafo-Seite bleibt fast frei:
-0–2 Stationen mit Engpass.
+**Ergebnis: nicht bestanden** (Regel: höchstens 5 von 508 über 100 %, keine über 120 %). Die Grenze ist um eine
+Station verfehlt. Zwei der sechs liegen gerade an der Grenze (Station 102: P90 100,0 %, Station 261: 100,5 %).
 
 ### Diagnose (Wetter 2012, je Station der Seed am nächsten am P90)
 
-- Gebietstyp: stadt 25, ort 4, streu 0.
-- Schlimmster Abschnitt: NAYY 4x50 23-mal, NAYY 4x150 5-mal, NAYY 4x240 1-mal. Immer Strang, einfach geführt,
-  nicht im Ausläufer, nicht markiert, Richtung Bezug; hinter dem Abschnitt meist 10 oder mehr Gebäude.
-- Überlaststunden am schlimmsten Abschnitt: Median **2 im Jahr** (erster Lauf: 27). Die Überlast ist knapp und
-  selten, aber im P90 vorhanden. Alle überlasteten Abschnitte zusammen: 0,8 km (erster Lauf: 8,5 km).
-- Zeitpunkt: meist Winterabend 18–20 Uhr (23 von 29), sonst um die Mittagszeit; November bis Februar.
+| Station | Gebiet | P90 | schlimmster Abschnitt | Länge | Gebäude dahinter | Überlaststunden im Seed |
+|---|---|---|---|---|---|---|
+| 10 | stadt | 108,4 % | NAYY 4x150 | 35 m | 25 | 15 |
+| 343 | stadt | 108,3 % | NAYY 4x240 | 24 m | 24 | 12 |
+| 14 | stadt | 104,6 % | NAYY 4x150 | 24 m | 25 | 4 |
+| 50 | stadt | 102,6 % | NAYY 4x150 | 29 m | 27 | 2 |
+| 261 | ort | 100,5 % | NAYY 4x150 | 34 m | 13 | 1 |
+| 102 | stadt | 100,0 % | NAYY 4x240 | 53 m | 26 | 0 |
 
-Zerlegung des schlimmsten Abschnitts in seiner Spitzenstunde (Median über die 29 Stationen):
+- Immer Strang, einfach geführt, nicht im Ausläufer, nicht markiert, Richtung Bezug. Zeitpunkt: Abende im
+  Februar 2012 (Kältewelle).
+- Alle überlasteten Abschnitte zusammen: 0,22 km (Fix-Runde 1: 0,8 km; erster Lauf: 8,5 km).
+- Zerlegung des schlimmsten Abschnitts in der Spitzenstunde, Median über die 6 Stationen:
 
-| Anteil | Bewertung (gridsim) | Auslegung (neue Regel, Näherung für den Median-Abschnitt) |
-|---|---|---|
-| Haushalt (69 Haushalte) | 52,9 kW | 54,5 kW (69 · 0,79 kW) |
-| Wärmepumpen | 48,4 kW (4 Knoten mit WP) | ca. 26 kW (k ganze WP × mittlere Leistung) |
-| E-Autos | 31,6 kW (5 Knoten mit Auto) | ca. 11 kW (k = 9, 9 · p_ev(9) = 10,7 kW) |
-| Summe | **106,0 kW** | **91,2 kW** |
-| Grenze (meist NAYY 4x50) | 96,8 kW | 96,8 kW |
+| Anteil | kW |
+|---|---|
+| Wärmepumpen (9 Knoten mit WP) | 135 |
+| Haushalte | 52 |
+| E-Autos | 11 |
+| **Summe** | **196** |
+| Auslegung | 181 |
+| Grenze (meist NAYY 4x150) | 185 |
 
-Die Auslegung liegt nie über der Grenze, die Bewertung in 26 von 29 Fällen. Was bleibt:
-
-1. **E-Autos:** p_ev(k) (Maier/Groiß 2026, 99-%-Quantil aus Smart-Meter-Daten) gibt bei 9 Autos 1,2 kW je Auto.
-   gridsims ungesteuertes Laden lässt Autos am Abend mit 11 kW (70 %) bzw. 3,7 kW ankommen und laden. Bei 9 Autos
-   laden in der Spitzenstunde oft 3 gleichzeitig, also rund 32 kW. Modell und Gleichzeitigkeitsfaktor
-   widersprechen sich.
-2. **Wärmepumpen:** Die Regel rechnet k × mittlere Leistung der berechtigten Knoten. Die Leistung hängt am
-   Wärmebedarf des Gebäudes, und Mehrfamilienhäuser haben große Wärmepumpen. Ein Seed, der 4 Wärmepumpen auf
-   große Gebäude setzt, liegt deutlich über k × Mittel.
-3. Der Haushaltsteil ist mit der H0-Untergrenze getroffen.
-
-Mögliche nächste Schritte (Entscheidung beim Controller, nicht umgesetzt):
-
-- E-Autos: p_ev(k) durch einen Gleichzeitigkeitsfaktor ersetzen, der zu gridsims Ladeereignissen passt (aus den
-  Seeds geschätzt), oder k · 11 kW · Anteil gleichzeitig ladender Autos aus gridsims Ankunftsverteilung.
-- Wärmepumpen: die k größten Leistungen hinter dem Abschnitt statt k × Mittel.
-- Zusätzlich zur Abnahme die 10-%-Grenze der markierten Abgänge klären (Owner). Strengere Lasten erhöhen sie
-  weiter.
+- Die Lücke kommt aus den Wärmepumpen in der Kältewelle. Die Regel rechnet k ganze Wärmepumpen × mittlere
+  Leistung der berechtigten Knoten; ein Seed, der viele Wärmepumpen auf große Mehrfamilienhäuser setzt, liegt
+  darüber (wie schon in Fix-Runde 1 beschrieben). E-Autos spielen hier kaum eine Rolle.
+- Mögliche nächste Schritte (Entscheidung beim Controller/Owner, nicht umgesetzt): die k größten WP-Leistungen
+  hinter dem Abschnitt statt k × Mittel; oder die Abnahmegrenze für 2012 als Extremjahr gesondert betrachten.
+  Die Grenze selbst bleibt nach Vorgabe unverändert.
 
 ### Nicht gerechnet
 
-Vorgabe: Vergleichsmatrix 2030/2040, Stichprobe, pandapower-Vergleich und Trafo-Gegenüberstellung nur bei
-bestandener Grenze. Die Zahlen dazu stehen unten beim ersten Lauf und gelten für dessen (zu schwaches) Netz.
-Netzspeicher-Bemessung: unverändert (Ruling 8). Neu bewertet wird sie erst mit neuen Matrixzahlen; der Befund
-des ersten Laufs (sehr große Speicher im Winter, kleine Wirkung) bleibt die einzige Grundlage.
+Vergleichsmatrix 2030/2040, erneute Dashboard-Prüfung und Neubewertung der Netzspeicher-Bemessung nur bei
+bestandener Grenze (Vorgabe). Die Zahlen dazu stehen beim ersten Lauf und gelten für dessen Netz. Die
+Netzspeicher-Bemessung ist unverändert.
 
 ## Dashboard-Prüfung
 
@@ -174,6 +217,14 @@ Playwright (Chromium, 1440 × 900). Geprüft: Lauf heute und 2030 (2012, ungeste
   Node-Test). Die Screenshots stammen aus dem ersten Durchgang (465 Stationen) und zeigen noch „257“.
 
 ## Abweichungen und Entscheidungen
+
+Fix-Runde 2 (Owner „Ist-Abgleich“, 25.10.2026):
+
+- **heute aus realen Daten:** WP 0,23 (21,4 % der Haushalte), E-Autos 0,076 je Haushalt, Override in
+  `profiles.SCENARIOS`; legacy unverändert.
+- **Mindestquerschnitt** im Strang in stadt/ort: NAYY 4x150 bzw. Al 4x95.
+- **`MODEL_VERSION` 2026-10-26.3.**
+- Neue Variante `prepared-ns-fix2`; fix1 bleibt erhalten. Matrix nur bei bestandener Grenze.
 
 Fix-Runde 1 (Controller, 25.10.2026):
 
@@ -229,6 +280,12 @@ sind mit dem Fix gerechnet.
 - **Trafo-Bemessung:** Trafos der Zusatzstationen und der bisherigen Stationen kommen aus `trafo_kva`
   (2–3 kVA je Wohnung, auf Normgrößen gerundet), nicht aus Betreiberdaten. Die Trafo-Kennzahlen hängen direkt
   daran; ein Trafo eine Stufe größer verschiebt „Trafo zuerst“ zu „Leitung zuerst“.
+- **Mindestquerschnitt ist übliche Praxis, kein Steyr-Beleg:** NAYY 4x150 bzw. Al 4x95 als kleinster
+  Strangquerschnitt in stadt und ort entspricht verbreiteter Planungspraxis für neue Ortsnetze. Für das reale
+  Netz in Steyr gibt es dafür keinen Beleg; ältere Netzteile können schwächer sein. Das Netz ist damit eher stärker
+  als das reale, und Leitungsengpässe der Zukunftsszenarien werden eher unterschätzt.
+- **Ist-Abgleich mit Landeswerten:** E-Autos und Wärmepumpen „heute“ kommen aus Werten für ganz OÖ
+  (Bezirkswerte nicht veröffentlicht); der Wärmepumpenanteil stammt aus dem Winter 2023/24.
 - **P90-Bemessung überdimensioniert eher:** Ganze Geräte als P90 der Binomialverteilung je Abschnitt bemessen
   jeden Abschnitt für ein Zehntel-Ereignis, und zwar alle Abschnitte zugleich. Ein Abschnitt mit einem
   Haushalt bekommt schon eine volle Wärmepumpe (P(keine WP) = 85 % < 90 %). Über die Region entsteht so ein
@@ -238,6 +295,133 @@ sind mit dem Fix gerechnet.
   20 Seeds, berichtet ist der Median. Bänder siehe `region.csv` je Einstellung im Cache.
 - **Netzspeicher:** Ort und Größe aus einem Auslegungslauf (Seed 0) je Einstellung, mit perfekter Tagesprognose;
   Kostensätze für Leitungen sind Platzhalter.
+
+## Zweiter Lauf, verworfen (Fix-Runde 1, `MODEL_VERSION` 2026-10-26.2)
+
+Kernzahlen: 487 Stationen, Abnahmegrenze 29 Stationen über 100 % und 5 über 120 % (nicht bestanden), markierte Abgänge 10,5 % (über der Grenze), Kabelanteil 74,7 %, NAYY 4x50 29 % des Strangs. Bemessungsregel wie heute (H0-Spitze, ganze Geräte P90), aber mit den legacy-Anteilen heute (15 % WP, 0,08 E-Autos) und ohne Mindestquerschnitt.
+
+#### Kurzfassung des zweiten Laufs
+
+- **Die Abnahmegrenze „heute“ ist auch mit der neuen Bemessungsregel nicht bestanden**, aber deutlich näher:
+  Auf der neu gebauten Variante `prepared-ns-fix1` (487 Stationen) liegen im P90 über 20 Seeds **29 Stationen über
+  100 %** und **5 über 120 %** (Regel: höchstens 5 von 487 über 100 %, keine über 120 %). Erster Lauf: 105 und 63.
+  Keine weitere Regeländerung durch den Umsetzer; die Vergleichsmatrix wurde nach Vorgabe nicht neu gerechnet.
+- **Markierte Abgänge überschreiten die 10-%-Grenze:** 51 von 487 Stationen (10,5 %) haben einen markierten
+  Abgang, davon 42 mit scheiternder Bemessung (die schwerere Auslegungslast reicht auch für 2 × NAYY 4x240 nicht).
+  Nach Spec Entscheidung 7 und den Global Constraints ist das ein Haltepunkt mit Rückfrage an den Owner.
+- **Rest-Ursache:** 25 der 29 Stationen liegen im Gebietstyp stadt, 4 in ort. Am schlimmsten Abschnitt liegen im
+  Median 106 kW an, ausgelegt sind 91 kW, die Grenze ist 97 kW; meist nur 2 Überlaststunden im Jahr. Der
+  Haushaltsteil passt jetzt (53 kW gegen 54,5 kW Auslegung). Zu niedrig bleiben die E-Autos und die Wärmepumpen:
+  - E-Autos: 32 kW in der Bewertung gegen etwa 11 kW Auslegung. p_ev(k) aus Smart-Meter-Daten setzt viel weniger
+    Gleichzeitigkeit an als gridsims ungesteuertes Laden mit 11 kW nach der Ankunft am Abend.
+  - Wärmepumpen: 48 kW gegen etwa 26 kW Auslegung. Die Regel rechnet mit der mittleren WP-Leistung der
+    berechtigten Knoten, ein Seed trifft oft große Wärmepumpen in Mehrfamilienhäusern.
+- Netzbau: Kabelanteil nach Trassenlänge 74,7 % (Band 74–84 %). NAYY 4x50 im Strang sinkt von 46 % auf 29 %,
+  4x150 und 4x240 steigen auf 18 % und 23 %.
+- Die Zusatzstationen wurden mit der neuen Regel neu bestimmt, weil die schwerere Auslegung mehr Abgänge markiert:
+  266 geplant, 231 behalten, 487 statt 465 Stationen.
+- Nebenbei behoben: Die Abnahmeregel im Bericht ist „5 von n Stationen“ (nicht 5 von 257); das Dashboard nimmt die
+  Stationszahl aus der API (Überschrift und Kachel „Transformers overloaded“).
+
+### Zweiter Lauf: Plausibilität des Netzbaus (`prepared-ns-fix1`)
+
+`gridsim prepare-feeders --input …/steyr-pv-2026-10-24/input --prepared prepared --extra-stations --out
+prepared-ns-fix1`, ausgeführt wie beim ersten Lauf (30 s auf hetzner). `prepared/` (ohne Zusatzstationen) wurde
+nicht neu gebaut: Diese Variante hat über 50 % markierte Abgänge und ist kein Abnahmekandidat.
+
+| Kennzahl | Fix-Runde 1 | erster Lauf | Ziel |
+|---|---|---|---|
+| Stationen | 487 | 465 | – |
+| Kabelanteil nach Trassenlänge (Abnahmegröße) | 74,7 % | 74,3 % | 79 % (Band 74–84 %) |
+| Kabelanteil nach Kabellänge | 70,0 % | 72,2 % | nur Information |
+| NS-Trasse je Station | 1,98 km | 2,06 km | ca. 2,7 km |
+| NS-Kabellänge je Station (Systeme einzeln) | 3,25 km | 3,10 km | ca. 2,7 km |
+| Abgänge je Station (Mittel / Median) | 4,28 / 3 | 4,36 / 3 | 3,4–3,8 |
+| Wohngebäude je Station (Mittel) | 37,1 | 38,8 | ca. 58 |
+| Trasse je Wohngebäude | 53,3 m | 52,9 m | ca. 46 m |
+| Stationen mit markiertem Abgang | **51 (10,5 %)** | 29 (6,2 %) | ≤ 10 % |
+| davon zu lang / Bemessung scheitert (Stationen) | 13 / 42 | 11 / 20 | – |
+| Ausläufer (Abgänge an Stationen) | 376 an 194 | 398 an 203 | – |
+| Gebietstypen stadt / ort / streu | 145 / 239 / 103 | 142 / 227 / 96 | – |
+
+Typverteilung (km, parallele Systeme einzeln; Anteil am Strang bzw. an den Hausanschlüssen):
+
+| Typ | Fix-Runde 1 km | Anteil | erster Lauf km | Anteil |
+|---|---|---|---|---|
+| NAYY 4x50 | 462,9 | 29,2 % | 663,2 | 46,0 % |
+| NAYY 4x150 | 279,0 | 17,6 % | 175,7 | 12,2 % |
+| NAYY 4x240 | 367,2 | 23,2 % | 200,5 | 13,9 % |
+| Al 4x70 | 119,3 | 7,5 % | 190,7 | 13,2 % |
+| Al 4x95 | 355,3 | 22,4 % | 210,1 | 14,6 % |
+| NAYY 4x35 (Hausanschluss) | 267,4 | 88,4 % | 263,9 | 87,3 % |
+| Al 4x25 (Hausanschluss) | 35,1 | 11,6 % | 38,4 | 12,7 % |
+
+Zusatzstationen: 266 geplant, 35 kleine wieder aufgelöst, 231 behalten. Der Anteil der Stationen mit markiertem
+Abgang sank von 65,0 % (Ausgangsnetz mit neuer Regel) über 19,0 % (Durchgang 1) auf 10,5 % (Durchgang 2); zwei
+Durchgänge sind das Maximum der Regel. Der Rest geht vor allem auf scheiternde Bemessung zurück (42 Stationen):
+Einzelne Abschnitte nahe der Station tragen mit der schwereren Auslegungslast auch 2 × 4x240 nicht.
+
+### Zweiter Lauf: Abnahmegrenze „heute“ (Fix-Runde 1)
+
+Gleiche Einstellung wie im ersten Lauf: heute, PV 1,0, Speicher base, ungesteuert, `trafo`, ohne Netzspeicher,
+2012/2017/2023, je 20 Seeds. 8 Worker, je Wetterjahr etwa 90 s; Cache `cache-fix1/`.
+
+| Wetterjahr | Seeds | Stationen > 100 % | Stationen > 120 % | Median P90 | Max P90 |
+|---|---|---|---|---|---|
+| 2012 | 20 | 29 | 4 | 60,6 % | 137,0 % |
+| 2017 | 20 | 9 | 5 | 55,8 % | 132,5 % |
+| 2023 | 20 | 8 | 3 | 52,4 % | 130,6 % |
+| alle (Maximum je Station) | 20 | **29** | **5** | 60,6 % | 137,0 % |
+
+**Ergebnis: nicht bestanden.** Regel: höchstens 5 von 487 Stationen über 100 %, keine über 120 %. Über 120 % liegen
+die Stationen 3, 60, 181, 337 und 344, alle im Gebietstyp stadt (P90 121–137 %). Der Median aller Werte je Station
+sinkt nur wenig (69 % → 61 %), die Spitzen aber stark (Max 203 % → 137 %). Die Trafo-Seite bleibt fast frei:
+0–2 Stationen mit Engpass.
+
+#### Diagnose (Wetter 2012, je Station der Seed am nächsten am P90)
+
+- Gebietstyp: stadt 25, ort 4, streu 0.
+- Schlimmster Abschnitt: NAYY 4x50 23-mal, NAYY 4x150 5-mal, NAYY 4x240 1-mal. Immer Strang, einfach geführt,
+  nicht im Ausläufer, nicht markiert, Richtung Bezug; hinter dem Abschnitt meist 10 oder mehr Gebäude.
+- Überlaststunden am schlimmsten Abschnitt: Median **2 im Jahr** (erster Lauf: 27). Die Überlast ist knapp und
+  selten, aber im P90 vorhanden. Alle überlasteten Abschnitte zusammen: 0,8 km (erster Lauf: 8,5 km).
+- Zeitpunkt: meist Winterabend 18–20 Uhr (23 von 29), sonst um die Mittagszeit; November bis Februar.
+
+Zerlegung des schlimmsten Abschnitts in seiner Spitzenstunde (Median über die 29 Stationen):
+
+| Anteil | Bewertung (gridsim) | Auslegung (neue Regel, Näherung für den Median-Abschnitt) |
+|---|---|---|
+| Haushalt (69 Haushalte) | 52,9 kW | 54,5 kW (69 · 0,79 kW) |
+| Wärmepumpen | 48,4 kW (4 Knoten mit WP) | ca. 26 kW (k ganze WP × mittlere Leistung) |
+| E-Autos | 31,6 kW (5 Knoten mit Auto) | ca. 11 kW (k = 9, 9 · p_ev(9) = 10,7 kW) |
+| Summe | **106,0 kW** | **91,2 kW** |
+| Grenze (meist NAYY 4x50) | 96,8 kW | 96,8 kW |
+
+Die Auslegung liegt nie über der Grenze, die Bewertung in 26 von 29 Fällen. Was bleibt:
+
+1. **E-Autos:** p_ev(k) (Maier/Groiß 2026, 99-%-Quantil aus Smart-Meter-Daten) gibt bei 9 Autos 1,2 kW je Auto.
+   gridsims ungesteuertes Laden lässt Autos am Abend mit 11 kW (70 %) bzw. 3,7 kW ankommen und laden. Bei 9 Autos
+   laden in der Spitzenstunde oft 3 gleichzeitig, also rund 32 kW. Modell und Gleichzeitigkeitsfaktor
+   widersprechen sich.
+2. **Wärmepumpen:** Die Regel rechnet k × mittlere Leistung der berechtigten Knoten. Die Leistung hängt am
+   Wärmebedarf des Gebäudes, und Mehrfamilienhäuser haben große Wärmepumpen. Ein Seed, der 4 Wärmepumpen auf
+   große Gebäude setzt, liegt deutlich über k × Mittel.
+3. Der Haushaltsteil ist mit der H0-Untergrenze getroffen.
+
+Mögliche nächste Schritte (Entscheidung beim Controller, nicht umgesetzt):
+
+- E-Autos: p_ev(k) durch einen Gleichzeitigkeitsfaktor ersetzen, der zu gridsims Ladeereignissen passt (aus den
+  Seeds geschätzt), oder k · 11 kW · Anteil gleichzeitig ladender Autos aus gridsims Ankunftsverteilung.
+- Wärmepumpen: die k größten Leistungen hinter dem Abschnitt statt k × Mittel.
+- Zusätzlich zur Abnahme die 10-%-Grenze der markierten Abgänge klären (Owner). Strengere Lasten erhöhen sie
+  weiter.
+
+#### Nicht gerechnet
+
+Vorgabe: Vergleichsmatrix 2030/2040, Stichprobe, pandapower-Vergleich und Trafo-Gegenüberstellung nur bei
+bestandener Grenze. Die Zahlen dazu stehen unten beim ersten Lauf und gelten für dessen (zu schwaches) Netz.
+Netzspeicher-Bemessung: unverändert (Ruling 8). Neu bewertet wird sie erst mit neuen Matrixzahlen; der Befund
+des ersten Laufs (sehr große Speicher im Winter, kleine Wirkung) bleibt die einzige Grundlage.
 
 ## Erster Lauf, verworfen (Bemessung nach Spec 4.3, `MODEL_VERSION` 2026-10-26.1)
 
