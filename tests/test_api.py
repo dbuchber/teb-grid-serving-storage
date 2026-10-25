@@ -193,3 +193,92 @@ def test_done_run_is_replayed_with_delay(make):
     with client.stream('GET', f'/api/runs/{run_id}/events') as s:
         n = sum(1 for line in s.iter_lines() if line.startswith('event: seed'))
     assert n == 3 and time.time() - t >= 0.14
+
+
+# --- Leitungen (Task 10) ---
+
+def write_fake_feeders(root):
+    """Minimaler feeders/-Ordner: index.json je Stationsindex, lines.geojson mit einem Abschnitt."""
+    d = root / 'feeders'
+    d.mkdir()
+    (d / 'index.json').write_text(json.dumps({
+        '0': {'area': 'stadt', 'n_feeders': 4, 'marked': 1}, '1': {'area': 'ort', 'n_feeders': 3, 'marked': 0},
+        '2': {'area': 'streu', 'n_feeders': 1, 'marked': 2}}))
+    (d / 'lines.geojson').write_text(json.dumps({'type': 'FeatureCollection', 'features': [
+        {'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': [[14.4, 48.0], [14.41, 48.0]]},
+         'properties': {'station': 0, 'type': 'NAYY 4x150', 'parallel': 1, 'feeder': 0, 'overhead': False,
+                        'service': False, 'length_m': 80.0}}]}))
+
+
+def test_limits_and_netzspeicher_in_run_body(make):
+    runner = FakeRunner()
+    client, _ = make(runner)
+    r = client.post('/api/runs', json={**BODY, 'limits': 'trafo+leitung', 'netzspeicher': True}).json()
+    wait_done(client, r['run_id'])
+    assert runner.calls[0].limits == 'trafo+leitung' and runner.calls[0].netzspeicher is True
+    plain = client.post('/api/runs', json=BODY).json()   # Standard: trafo, ohne Netzspeicher, eigener Lauf
+    assert plain['run_id'] != r['run_id']
+    wait_done(client, plain['run_id'])
+    assert runner.calls[1].limits == 'trafo' and runner.calls[1].netzspeicher is False
+
+
+@pytest.mark.parametrize('field,value', [('limits', 'x'), ('netzspeicher', 'maybe')])
+def test_invalid_limits_400(make, field, value):
+    client, _ = make()
+    r = client.post('/api/runs', json={**BODY, field: value})
+    assert r.status_code == 400 and field in r.json()['error']
+
+
+def test_options_list_limits(make):
+    client, _ = make()
+    opt = client.get('/api/options').json()
+    assert opt['limits'] == ['trafo', 'trafo+leitung'] and opt['netzspeicher'] == [False, True]
+
+
+def test_stations_area_marked_none_without_feeders(make):
+    client, _ = make()
+    assert all(s['area'] is None and s['marked'] is None for s in client.get('/api/stations').json())
+
+
+def test_stations_area_and_marked_with_feeders(tmp_path):
+    root = write_fake_prepared(tmp_path / 'prep')
+    write_fake_feeders(root)
+    client = TestClient(create_app(prepared_root=root, cache_dir=tmp_path / 'cache', runner=FakeRunner()))
+    st = client.get('/api/stations').json()
+    assert [(s['area'], s['marked']) for s in st] == [('stadt', 1), ('ort', 0), ('streu', 2)]
+
+
+def test_lines_404_without_feeders(make):
+    client, _ = make()
+    assert client.get('/api/lines').status_code == 404
+
+
+def test_lines_geojson_with_feeders(tmp_path):
+    root = write_fake_prepared(tmp_path / 'prep')
+    write_fake_feeders(root)
+    client = TestClient(create_app(prepared_root=root, cache_dir=tmp_path / 'cache', runner=FakeRunner()))
+    r = client.get('/api/lines', params={'weather_year': 2023})
+    assert r.status_code == 200 and r.json()['features'][0]['properties']['station'] == 0
+    assert client.get('/api/lines', params={'weather_year': 2020}).status_code == 400
+
+
+def test_costs_pass_line_and_netzspeicher_medians(make, monkeypatch):
+    """Task 7/9 Review: line_over_m und netzspeicher_kwh (Median, None-sicher) gehen in metrics.costs."""
+    def runner(root, params, workers=4, cache_dir=None):
+        for i in range(3):
+            r = fake_result(i)
+            r.region.update({'line_over_m': 100.0 * (i + 1), 'netzspeicher_kwh': 50.0 * (i + 1)})
+            yield r
+    client, _ = make(runner)
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    c = client.post('/api/costs', json={'run_id': run_id, 'cost': {'line_eur_per_m': 10}}).json()
+    assert c['line_eur'] == 200.0 * 10 and c['netzspeicher_eur'] == 100.0 * 600
+
+
+def test_costs_without_line_values_are_none(make):
+    client, _ = make()   # fake_result ohne Leitungskennzahlen (Lauf ohne feeders/)
+    run_id = client.post('/api/runs', json=BODY).json()['run_id']
+    wait_done(client, run_id)
+    c = client.post('/api/costs', json={'run_id': run_id, 'cost': {'line_eur_per_m': 10}}).json()
+    assert c['line_eur'] is None and c['netzspeicher_eur'] is None

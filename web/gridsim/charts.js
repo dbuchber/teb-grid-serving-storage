@@ -26,10 +26,18 @@ export const TILES = [
   { key: "trafo_plus2", label: "Transformer +2 sizes or more", unit: "stations", digits: 0 },
   { key: "trafo_over_1000", label: "Above 1000 kVA", unit: "needs new MV connection", digits: 0 },
   { key: "ev_unmet_mwh", label: "EV energy not charged by 7 am", unit: "MWh per year", digits: 1 },
+  // Leitungskennzahlen: nur sichtbar, wenn der Lauf Stationsnetze hatte (sonst None → keine Werte)
+  { key: "stations_line_load_congestion", label: "Lines overloaded (demand)", unit: "stations, synthetic LV grid", digits: 0, optional: true },
+  { key: "stations_line_only", label: "Line limits before transformer", unit: "stations", digits: 0, optional: true },
+  { key: "line_over_m", label: "Line length above rated current", unit: "m, thermal only", digits: 0, optional: true },
+  { key: "netzspeicher_kwh", label: "Grid storage at line bottlenecks", unit: "kWh installed", digits: 0, optional: true },
 ];
 
+// Kacheln, die zu den Seeds passen: optionale (Leitungs-)Kacheln nur, wenn mindestens ein Seed einen Wert liefert
+export const visibleTiles = seeds => TILES.filter(t => !t.optional || seeds.some(s => typeof s.region[t.key] === "number"));
+
 export function renderTiles(root, seeds, nTotal) {
-  root.replaceChildren(...TILES.map(t => {
+  root.replaceChildren(...visibleTiles(seeds).map(t => {
     const b = bandOf(seeds, t.key);
     const range = b.n > 1 ? `${fmt(b.p10, t.digits)}–${fmt(b.p90, t.digits)}` : "";
     return el("div", { class: "gs-tile" },
@@ -65,7 +73,7 @@ export function renderCompare(root, rows, label, digits = 0) {
   rows.forEach((r, i) => {
     const y = 20 + i * rowH;
     s.append(el("svg:text", { x: pad - 8, y: y + 14, class: "gs-label", "text-anchor": "end", text: r.label }));
-    if (!r.band) { s.append(el("svg:text", { x: pad, y: y + 14, class: "gs-tick", text: r.pending ? "running…" : "not run yet" })); return; }
+    if (!r.band) { s.append(el("svg:text", { x: pad, y: y + 14, class: "gs-tick", text: r.pending ? "running…" : r.note ?? "not run yet" })); return; }
     s.append(el("svg:rect", { x: pad, y: y + 4, width: Math.max(1, x(r.band.median) - pad), height: 14, class: "gs-bar" }));
     s.append(el("svg:line", { x1: x(r.band.p10), x2: x(r.band.p90), y1: y + 11, y2: y + 11, class: "gs-whisker" }));
     s.append(el("svg:text", { x: x(Math.max(r.band.p90, r.band.median)) + 6, y: y + 15, class: "gs-tick", text: `${fmt(r.band.median, digits)} (${r.band.n})` }));

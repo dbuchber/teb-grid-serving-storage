@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from api.jobs import JobManager
@@ -28,6 +28,8 @@ class RunBody(BaseModel):
     charging: str = 'uncontrolled'
     storage: str = 'base'
     n_seeds: int = 20
+    limits: str = 'trafo'
+    netzspeicher: bool = False
 
 
 class CostBody(BaseModel):
@@ -55,6 +57,11 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
             prepared[year] = load_prepared(root, year)
         return prepared[year]
 
+    def feeders_index():
+        """``feeders/index.json`` (Stationsindex → Gebietstyp, Abgänge, Markierungen); None ohne Stationsnetze."""
+        f = root / 'feeders' / 'index.json'
+        return json.loads(f.read_text()) if f.exists() else None
+
     app = FastAPI(title='gridsim', docs_url=None, redoc_url=None, openapi_url=None)
     r = APIRouter(prefix='/api')
 
@@ -76,6 +83,7 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
     def options():
         return {'weather_year': list(runmod.WEATHER_YEARS), 'scenario': list(runmod.SCENARIOS),
                 'pv_factor': list(runmod.PV_FACTORS), 'charging': list(runmod.CHARGING), 'storage': list(runmod.STORAGE),
+                'limits': list(runmod.LIMITS), 'netzspeicher': [False, True],
                 'n_seeds': 20, 'cost_defaults': metrics.COST_DEFAULTS,
                 'placeholders': [k for k, v in metrics.COST_DEFAULTS.items() if v is None]}
 
@@ -83,7 +91,22 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
     def stations(weather_year: int = 2023):
         if weather_year not in runmod.WEATHER_YEARS:
             return _error(400, f'weather_year must be one of {list(runmod.WEATHER_YEARS)}')
-        return [{k: s[k] for k in ('id', 'kva', 'n_hh', 'uw', 'synthetic', 'lon', 'lat')} for s in prep(weather_year).stations]
+        index = feeders_index()   # Gebietstyp und Zahl markierter Abgänge je Station; None ohne Stationsnetze
+        out = []
+        for s in prep(weather_year).stations:
+            f = None if index is None else index.get(str(s['idx']))
+            out.append({**{k: s[k] for k in ('id', 'kva', 'n_hh', 'uw', 'synthetic', 'lon', 'lat')},
+                        'area': f and f['area'], 'marked': f and f['marked']})
+        return out
+
+    @r.get('/lines')
+    def lines(weather_year: int = 2023):
+        if weather_year not in runmod.WEATHER_YEARS:
+            return _error(400, f'weather_year must be one of {list(runmod.WEATHER_YEARS)}')
+        f = root / 'feeders' / 'lines.geojson'
+        if not f.exists():
+            return _error(404, 'no LV lines prepared')
+        return FileResponse(f, media_type='application/geo+json')
 
     @r.post('/runs')
     def start(body: RunBody):
@@ -155,6 +178,9 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
         seeds = job.snapshot()['seeds']
         keys = ('storage_units', 'trafo_plus1', 'trafo_plus2', 'trafo_over_1000')
         kpis = {k: float(np.median([s['region'][k] for s in seeds])) for k in keys}
+        for k in ('line_over_m', 'netzspeicher_kwh'):   # None ohne Stationsnetze (bzw. ohne Netzspeicher)
+            vals = [s['region'].get(k) for s in seeds]
+            kpis[k] = None if any(v is None for v in vals) else float(np.median(vals))
         return metrics.costs(kpis, {**metrics.COST_DEFAULTS, **body.cost})
 
     app.include_router(r)
