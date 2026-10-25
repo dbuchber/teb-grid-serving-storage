@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="vendor/maplibre-gl-4.7.1/maplibre-gl.css">
 <link rel="stylesheet" href="present.css?v=20261025f">
 <script src="vendor/maplibre-gl-4.7.1/maplibre-gl-csp.js" defer></script>
-<script type="module" src="js/present/main.js?v=20261025b"></script>
+<script type="module" src="js/present/main.js?v=20261025c"></script>
 </head>
 <body>
 <main class="presentation" id="presentation">
@@ -19,7 +19,7 @@
   </div>
 
   <!-- 0 · Title -->
-  <section class="slide tap" data-label="Start" aria-label="Start">
+  <section class="slide tap" data-label="Start" data-dwell="10" aria-label="Start">
     <div class="center">
       <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
         <rect x="9" y="10" width="30" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
@@ -33,7 +33,7 @@
   </section>
 
   <!-- 1 · Problem -->
-  <section class="slide tap" data-label="The problem" aria-label="The problem">
+  <section class="slide tap" data-label="The problem" data-dwell="35" aria-label="The problem">
     <div class="center">
       <div class="eyebrow">The problem</div>
       <div class="big-number" aria-hidden="true"><small>up to </small><span data-count="193">193</span><small> of 257</small></div>
@@ -48,7 +48,7 @@
   </section>
 
   <!-- 2 · Who -->
-  <section class="slide tap" data-label="Who is affected" aria-label="Who is affected">
+  <section class="slide tap" data-label="Who is affected" data-dwell="20" aria-label="Who is affected">
     <div class="content">
       <div class="eyebrow">Who is affected</div>
       <h2 tabindex="-1">Two parties, one battery in the basement.</h2>
@@ -72,7 +72,7 @@
   </section>
 
   <!-- 3 · How the tool computes -->
-  <section class="slide tap how" data-label="How the tool computes" data-steps="4" aria-label="How the tool computes">
+  <section class="slide tap how" data-label="How the tool computes" data-dwell="8" data-steps="4" aria-label="How the tool computes">
     <div class="content wide">
       <div class="eyebrow">How the tool computes · <span class="step-count">1 / 4</span></div>
       <div class="captions" aria-live="polite">
@@ -133,7 +133,7 @@
   </section>
 
   <!-- 4 · Playback -->
-  <section class="slide play" data-label="One week, hour by hour" aria-label="One week, hour by hour">
+  <section class="slide play" data-label="One week, hour by hour" data-dwell="3.5" aria-label="One week, hour by hour">
     <div class="play-layout">
       <div class="play-map"><div id="play-map" role="region" aria-label="Map of the transformers in the test region Steyr"></div>
         <ul class="legend" id="play-legend"></ul></div>
@@ -170,7 +170,7 @@
   </section>
 
   <!-- 5 · Idea -->
-  <section class="slide tap" data-label="Our proposal" data-steps="5" aria-label="Our proposal">
+  <section class="slide tap" data-label="Our proposal" data-dwell="9" data-steps="5" aria-label="Our proposal">
     <div class="content">
       <div class="eyebrow">Our proposal</div>
       <h2 tabindex="-1">Borrow batteries for short peaks, with a signed request, and the household never loses money.</h2>
@@ -191,7 +191,7 @@
   </section>
 
   <!-- 6 · IES-Profil -->
-  <section class="slide tap ies" data-label="Interoperability profile" data-steps="4" aria-label="Interoperability profile">
+  <section class="slide tap ies" data-label="Interoperability profile" data-dwell="10" data-steps="4" aria-label="Interoperability profile">
     <div class="content wide">
       <div class="eyebrow">The answer to the challenge · interoperability profile (IES method) · <span class="step-count">1 / 4</span></div>
       <h2 tabindex="-1">Who exchanges what, in twelve processes.</h2>
@@ -235,7 +235,7 @@
   </section>
 
   <!-- 7 · Sicherheit und Ehrlichkeit -->
-  <section class="slide tap" data-label="Security and honesty" aria-label="Security and honesty">
+  <section class="slide tap" data-label="Security and honesty" data-dwell="30" aria-label="Security and honesty">
     <div class="content wide">
       <div class="eyebrow">Security, resilience and what is real</div>
       <h2 tabindex="-1">Thousands of batteries switching at once could harm the grid as easily as help it.</h2>
@@ -272,7 +272,7 @@
   </section>
 
   <!-- 8 · My battery -->
-  <section class="slide battery" data-label="My battery" aria-label="My battery">
+  <section class="slide battery" data-label="My battery" data-dwell="30" aria-label="My battery">
     <div class="content wide">
       <div class="eyebrow">For the household · my battery</div>
       <h2 tabindex="-1">What does it cost me, and how much do the calls wear it?</h2>
@@ -318,7 +318,7 @@
   </section>
 
   <!-- 9 · Pilot -->
-  <section class="slide" data-label="Next step" aria-label="Next step">
+  <section class="slide" data-label="Next step" data-dwell="25" aria-label="Next step">
     <div class="content">
       <div class="eyebrow">What it takes</div>
       <h2 tabindex="-1">A pilot in Steyr: 2–3 transformer areas, 30–60 homes, one solar season.</h2>

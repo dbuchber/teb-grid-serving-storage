@@ -4,7 +4,7 @@ import { playSlide } from "./playmap.js?v=20261025a";
 import { batterySlide } from "./battery.js?v=20261025a";
 
 const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const AUTO_MS = 6500;
+const AUTO_MS = 6500;  // ohne data-dwell; sonst Sekunden je Teilschritt aus der Folie (Summe ca. 5 min)
 const root = document.getElementById("presentation");
 const slides = [...root.querySelectorAll(".slide")];
 const dots = document.getElementById("dots");
@@ -20,6 +20,7 @@ const hooks = new Map([
 
 let current = -1, sub = 0, auto = false, timer = null;
 const stepsOf = i => Number(slides[i].dataset.steps || 1);
+const dwellOf = i => (slides[i].dataset.dwell ? Number(slides[i].dataset.dwell) * 1000 : AUTO_MS);
 
 // ---- Hell/Dunkel ----
 const themeBtn = document.getElementById("theme");
@@ -107,9 +108,9 @@ function schedule(entered) {
   if (current === slides.length - 1) { setAuto(false); return; }
   if (entered && typeof entered.then === "function") {
     const at = current;
-    entered.then(() => { if (auto && current === at) timer = setTimeout(next, 1500); });
+    entered.then(() => { if (auto && current === at) timer = setTimeout(next, dwellOf(at)); });
   } else {
-    timer = setTimeout(next, AUTO_MS);
+    timer = setTimeout(next, dwellOf(current));
   }
 }
 function setAuto(on) {
