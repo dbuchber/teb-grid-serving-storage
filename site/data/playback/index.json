@@ -1,0 +1,362 @@
+[
+ {
+  "file": "winter_2012_2040m_uncontrolled.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2012_2040m_controlled.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2012_2040m_v2g.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2012_2040_uncontrolled.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2012_2040_controlled.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2012_2040_v2g.json",
+  "season": "winter",
+  "start": "2012-02-06",
+  "weather_year": 2012,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2012_heute_1.0_base.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2012_heute_1.0_room.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2012_heute_1.5_base.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2012_heute_1.5_room.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2012_heute_2.0_base.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2012_heute_2.0_room.json",
+  "season": "summer",
+  "start": "2012-06-25",
+  "weather_year": 2012,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "winter_2017_2040m_uncontrolled.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2017_2040m_controlled.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2017_2040m_v2g.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2017_2040_uncontrolled.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2017_2040_controlled.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2017_2040_v2g.json",
+  "season": "winter",
+  "start": "2017-01-16",
+  "weather_year": 2017,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2017_heute_1.0_base.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2017_heute_1.0_room.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2017_heute_1.5_base.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2017_heute_1.5_room.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2017_heute_2.0_base.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2017_heute_2.0_room.json",
+  "season": "summer",
+  "start": "2017-07-17",
+  "weather_year": 2017,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "winter_2023_2040m_uncontrolled.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2023_2040m_controlled.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2023_2040m_v2g.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040m",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2023_2040_uncontrolled.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2023_2040_controlled.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "controlled",
+  "storage": "base"
+ },
+ {
+  "file": "winter_2023_2040_v2g.json",
+  "season": "winter",
+  "start": "2023-12-04",
+  "weather_year": 2023,
+  "scenario": "2040",
+  "pv_factor": 1.0,
+  "charging": "v2g",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2023_heute_1.0_base.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2023_heute_1.0_room.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 1.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2023_heute_1.5_base.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2023_heute_1.5_room.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 1.5,
+  "charging": "uncontrolled",
+  "storage": "room"
+ },
+ {
+  "file": "summer_2023_heute_2.0_base.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "base"
+ },
+ {
+  "file": "summer_2023_heute_2.0_room.json",
+  "season": "summer",
+  "start": "2023-06-12",
+  "weather_year": 2023,
+  "scenario": "heute",
+  "pv_factor": 2.0,
+  "charging": "uncontrolled",
+  "storage": "room"
+ }
+]

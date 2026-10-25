@@ -95,6 +95,13 @@ Quelle: [submission-template.txt](challenge/submission-template.txt)
 - [E] **Anreiz für Endkunden über die Förderung:** Volle Förderung für PV/Speicher
   nur mit standardisierter Steuerschnittstelle und Teilnahme an den Testabrufen;
   ohne diese nur Teilförderung
+- [E] **Förderung gestaffelt nach Steuerbarkeit** (Owner, 24.10.2026): je mehr
+  Steuerbarkeit der Kunde zulässt, desto höher die Förderung; die volle Förderung
+  wird erst ausgezahlt, wenn möglichst viel Steuerbarkeit gegeben ist. Stufen und
+  Auszahlung in Tranchen: [ems-konzept.md](ems-konzept.md) § 5
+- [E] **Schadlosstellung:** Der Kunde wird durch Eingriffe des Netzbetreibers nie
+  schlechter gestellt (entgangene bessere Vermarktung, teurer Nachkauf nach einem
+  Entlade-Abruf); Ersatz plus Vergütung: [ems-konzept.md](ems-konzept.md) § 6
 - [E] Die Förderung deckt auch die **Installationskosten** der Box
 - [E] **Speicherförderungen werden ausdrücklich daran geknüpft:** Ein Speicher
   bekommt die volle Förderung nur, wenn er über die Schnittstelle in **beide
@@ -140,6 +147,10 @@ Quelle: [submission-template.txt](challenge/submission-template.txt)
 - [V] 3–5 Ortsnetz-Segmente als Netze aus SimBench (synthetisch), je eines pro Typ
   (Stadt / EFH-Siedlung / ländlich); Engpass und Abruf vor allem in EFH- und
   ländlichen Segmenten
+- [E] Der **Netzzustand** (Auslastung, Engpässe) kommt aus den **Simulationen**
+  (SimBench/pandapower), nicht aus realen Netzdaten
+- [O] **Erkennungsgebiet der PV-Modelle** (Orthofoto → PV-Anlagen): Radius bzw.
+  Sektoren um Steyr; derzeit 3×3 km um UW 75701 (Kronstorf-Anker)
 - [E] **Kartenbasiert**: Netzsegmente, Umspannwerke/Trafos und Speicherstandorte
   auf einer Karte; Zustand (Engpass, Abruf, Reaktion) sichtbar
 - [E] **Tabellarisch**: Geräteliste mit Typ, Leistung, Kapazität, Zuverlässigkeit,

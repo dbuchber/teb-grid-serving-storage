@@ -7,7 +7,7 @@ import { createStationMap } from "./map.js";
 
 const LABELS = {
   charging: { uncontrolled: "Uncontrolled charging", winap: "Winter low-price window 23:00 (WiNAP)", t3d: "Dynamic grid tariff per segment (T3d)",
-    controlled: "Controlled charging (DSO limit)", v2g: "Controlled charging + V2G" },
+    controlled: "Smart charging (DSO limit)", v2g: "Smart charging + V2G" },
   storage: { base: "Self-consumption", forecast: "Grid-serving (forecast)", room: "Grid-serving (night discharge)" },
   scenario: { heute: "Today", 2030: "2030", "2040m": "2040 moderate (35 % heat pumps)", 2040: "2040 stress case (70 % heat pumps)" },
   weather_year: { 2023: "2023 (mild)", 2017: "2017", 2012: "2012 (cold spell)" },

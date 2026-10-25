@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Grid-Serving Storage Steyr</title>
+<link rel="stylesheet" href="vendor/maplibre-gl-4.7.1/maplibre-gl.css">
+<link rel="stylesheet" href="present.css?v=20261025d">
+<script src="vendor/maplibre-gl-4.7.1/maplibre-gl-csp.js" defer></script>
+<script type="module" src="js/present/main.js?v=20261025b"></script>
+</head>
+<body>
+<main class="presentation" id="presentation">
+  <div class="topbar">
+    <button class="pill" id="theme" type="button" aria-pressed="false">Light mode</button>
+    <a class="pill" href="details">Full write-up</a>
+    <button class="pill" id="autoplay" type="button" role="switch" aria-checked="false">Auto-play <span class="toggle"><span></span></span></button>
+  </div>
+
+  <!-- 0 · Title -->
+  <section class="slide tap" data-label="Start" aria-label="Start">
+    <div class="center">
+      <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+        <rect x="9" y="10" width="30" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="3"/>
+        <path d="M27 14 19 26h8l-6 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="eyebrow">TEB Hackathon · Challenge Grid-Serving Storage</div>
+      <h1 tabindex="-1">Can the batteries in our basements relieve the local grid?</h1>
+      <p class="sub">A proposal for how a grid operator can borrow customers’ batteries safely, tested by simulating all 257 transformers of our test region Steyr, Upper Austria.</p>
+    </div>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 1 · Problem -->
+  <section class="slide tap" data-label="The problem" aria-label="The problem">
+    <div class="center">
+      <div class="eyebrow">The problem</div>
+      <div class="big-number" aria-hidden="true"><span data-count="193">193</span><small> of 257</small></div>
+      <h2 tabindex="-1"><span class="sr-only">193 of 257 </span>transformers in our test region would be overloaded in winter 2040, in our stress case.</h2>
+      <p>A <b>transformer</b> is the station in a neighbourhood that supplies the houses around it. Its <b>rating</b> is the power it may carry
+         continuously. If 70 % of buildings heat with a heat pump and 60 % of cars are electric, most transformers go above their rating,
+         even in a mild winter like 2023. This is an upper bound: we size our synthetic transformers at the low end of Austrian field grids;
+         sized at the top end, 99 instead of 200 (weather year 2017). In summer the opposite happens: with twice today’s solar, 32–34 transformers receive more power from the roofs than they can carry.</p>
+      <p class="answer">With 35 % heat pumps it is still 152–181, but <b>smart charging</b> of the cars brings it down to 7–30 (optimistic count).</p>
+    </div>
+    <a class="source" href="details#results">Simulation results, median of 20 random draws</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 2 · Who -->
+  <section class="slide tap" data-label="Who is affected" aria-label="Who is affected">
+    <div class="content">
+      <div class="eyebrow">Who is affected</div>
+      <h2 tabindex="-1">Two parties, one battery in the basement.</h2>
+      <div class="cards two">
+        <article class="card rise" style="--d:0">
+          <h3>The grid operator</h3>
+          <p>Runs the local power lines. Against an overload it can replace a transformer with a larger one, which is expensive and takes years,
+             or limit solar systems, which wastes energy.</p>
+          <p class="q">“Can I use the batteries that are already there, for a few hours?”</p>
+        </article>
+        <article class="card rise" style="--d:1">
+          <h3>The household</h3>
+          <p>Owns a home battery next to its solar system. Today it charges with the household's own solar power and empties in the evening.
+             The owner decides how it runs.</p>
+          <p class="q">“What does it cost me, and does it wear out my battery?”</p>
+        </article>
+      </div>
+    </div>
+    <a class="more" href="details#challenge">The hackathon task in full →</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 3 · How the tool computes -->
+  <section class="slide tap how" data-label="How the tool computes" data-steps="4" aria-label="How the tool computes">
+    <div class="content wide">
+      <div class="eyebrow">How the tool computes · <span class="step-count">1 / 4</span></div>
+      <div class="captions" aria-live="polite">
+        <h2 class="cap" data-at="0" tabindex="-1">One house, one hour: add up what it draws.</h2>
+        <h2 class="cap" data-at="1" tabindex="-1">Add up all houses on one transformer and compare with its rating.</h2>
+        <h2 class="cap" data-at="2" tabindex="-1">Repeat for every hour of a year, with real weather.</h2>
+        <h2 class="cap" data-at="3" tabindex="-1">Repeat with 20 random placements of heat pumps and cars.</h2>
+      </div>
+      <div class="how-stage">
+        <!-- Szene 1: ein Haus -->
+        <div class="scene" data-at="0">
+          <svg viewBox="0 0 600 260" class="scene-svg" role="img" aria-label="One house on a winter evening: household 0.6 kW, heat pump 3.1 kW, car 11 kW, solar 0 kW, together 14.7 kW from the grid">
+            <path d="M60 140 140 70 220 140v90H60z" class="house"/>
+            <g class="terms-list" font-size="17">
+              <text x="270" y="70" class="t r" style="--d:0">+ 0.6 kW household</text>
+              <text x="270" y="102" class="t r" style="--d:1">+ 3.1 kW heat pump</text>
+              <text x="270" y="134" class="t r" style="--d:2">+ 11 kW electric car</text>
+              <text x="270" y="166" class="t r" style="--d:3">− 0 kW solar (after dark)</text>
+              <line x1="270" x2="520" y1="184" y2="184" class="rule r" style="--d:4"/>
+              <text x="270" y="216" class="t strong r" style="--d:4" font-size="22">= 14.7 kW from the grid</text>
+            </g>
+          </svg>
+          <p class="scene-note">Example for a winter evening at 18:00. Household use follows the Austrian standard load profile, the heat pump the outdoor temperature,
+             the car arrives at a random time and charges what it used that day.</p>
+        </div>
+        <!-- Szene 2: ein Trafo -->
+        <div class="scene" data-at="1">
+          <svg viewBox="0 0 600 260" class="scene-svg" role="img" id="how-trafo-svg" aria-label="The houses of one transformer added up and compared with its rating">
+            <g id="how-houses"></g>
+            <rect x="330" y="105" width="44" height="50" rx="6" class="trafo"/>
+            <text x="352" y="176" text-anchor="middle" class="t small">transformer</text>
+            <rect x="420" y="40" width="44" height="190" class="bar-bg"/>
+            <rect x="420" y="40" width="44" height="190" class="bar-fill"/>
+            <line x1="410" x2="474" y1="88" y2="88" class="rating"/>
+            <text x="482" y="93" class="t small" id="how-rating">rating</text>
+            <text x="482" y="48" class="t strong" id="how-peak"></text>
+            <text x="482" y="70" class="t small bad">overloaded</text>
+          </svg>
+          <p class="scene-note"><span id="how-trafo-note"></span> Each transformer gets the houses that are closest to it in the street network. We read 1 kVA as about 1 kW.</p>
+        </div>
+        <!-- Szene 3: Jahr -->
+        <div class="scene" data-at="2">
+          <svg viewBox="0 0 600 260" class="scene-svg" role="img" aria-label="Load of one transformer over a winter week, with the hours above its rating marked">
+            <g id="how-week"></g>
+          </svg>
+          <p class="scene-note" id="how-week-note">One week out of 8,760 hours. Real weather from three years: 2012 (cold spell), 2017 and 2023 (mild).</p>
+        </div>
+        <!-- Szene 4: 20 Ziehungen -->
+        <div class="scene" data-at="3">
+          <div class="draws" id="how-draws" aria-hidden="true"></div>
+          <p class="scene-note">Which buildings get a heat pump or an electric car is not known, so we draw it at random, 20 times.
+             We report the middle value (median) and how far the draws spread. <span class="key"><i class="hp"></i>heat pump <i class="ev"></i>electric car <i class="both"></i>both</span></p>
+        </div>
+      </div>
+    </div>
+    <a class="more" href="details#approach">All steps, assumptions and data →</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 4 · Playback -->
+  <section class="slide play" data-label="One week, hour by hour" aria-label="One week, hour by hour">
+    <div class="play-layout">
+      <div class="play-map"><div id="play-map" role="region" aria-label="Map of the transformers in the test region Steyr"></div>
+        <ul class="legend" id="play-legend"></ul></div>
+      <aside class="play-panel">
+        <div class="eyebrow">Live simulation · one week, hour by hour</div>
+        <h2 tabindex="-1" id="play-title">Cold week in February 2012</h2>
+        <div class="clock" id="play-clock" aria-live="off">–</div>
+        <div class="counters">
+          <div><b id="play-now">–</b><span>transformers overloaded now</span></div>
+          <div><b id="play-ever">–</b><span>overloaded at least once this week</span></div>
+        </div>
+        <svg class="spark" id="play-spark" viewBox="0 0 320 90" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <p class="spark-legend" id="spark-legend"></p>
+        <div class="controls">
+          <div class="seg" role="radiogroup" aria-label="Season" id="ctl-season">
+            <button type="button" data-v="winter" aria-checked="true" role="radio">Winter</button>
+            <button type="button" data-v="summer" aria-checked="false" role="radio">Summer</button>
+          </div>
+          <div class="seg" role="radiogroup" aria-label="Variant" id="ctl-variant"></div>
+          <label>Weather <select id="ctl-year"><option value="2012">2012 (cold spell)</option><option value="2017">2017</option><option value="2023">2023 (mild)</option></select></label>
+          <label id="ctl-scen-wrap">Heat pumps <select id="ctl-scen"><option value="2040m">2040: 35 % of buildings</option><option value="2040">2040: 70 % (stress case)</option></select></label>
+          <label id="ctl-pv-wrap" hidden>Solar <select id="ctl-pv"><option value="1.0">as today</option><option value="1.5" selected>×1.5</option><option value="2.0">×2</option></select></label>
+        </div>
+        <div class="transport">
+          <button type="button" class="playbtn" id="play-btn" aria-label="Play">▶</button>
+          <input type="range" id="play-pos" min="0" max="167" value="0" aria-label="Hour of the week">
+          <button type="button" class="pill small" id="play-speed">1×</button>
+        </div>
+        <p class="explain" id="play-explain"></p>
+        <p class="note">gridsim, one of 20 random draws. Synthetic grid from open data, not measurements.
+          <a href="details#try">Explore every transformer →</a></p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 5 · Idea -->
+  <section class="slide tap" data-label="Our proposal" data-steps="5" aria-label="Our proposal">
+    <div class="content">
+      <div class="eyebrow">Our proposal</div>
+      <h2 tabindex="-1">Borrow batteries for short peaks, with a signed request, and the household never loses money.</h2>
+      <p>The owner runs the battery as usual. Only in exceptional situations, and for a limited time, may the grid operator ask all batteries behind one transformer
+         to charge or discharge, so that solar systems and consumers do not have to be cut back (curtailed).</p>
+      <ol class="flow">
+        <li data-at="0"><b>The box</b><span>A small control unit next to the electricity meter. It receives requests, checks them and controls the battery.</span></li>
+        <li data-at="1"><b>A signed call</b><span>The grid operator asks all batteries behind one transformer at once. A digital signature proves who sent it; limits and an expiry are built in.</span></li>
+        <li data-at="2"><b>Test calls</b><span>Short, regular trial runs measure how much power the grid operator can really rely on.</span></li>
+        <li data-at="3"><b>Checked by the meter</b><span>The digital electricity meter (smart meter) confirms what really happened.</span></li>
+        <li data-at="4"><b>Subsidy and refund</b><span>More control allowed, more subsidy. Any extra cost from a call is paid back.</span></li>
+      </ol>
+      <p class="honest">Where it helps: short peaks, where batteries are already installed, and as a bridge until a transformer is replaced.
+         In a long cold spell batteries cannot recharge; there smart charging and larger transformers do the work.</p>
+    </div>
+    <a class="more" href="details#proposal">Process, roles and limits in full →</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 6 · IES-Profil -->
+  <section class="slide tap ies" data-label="Interoperability profile" data-steps="4" aria-label="Interoperability profile">
+    <div class="content wide">
+      <div class="eyebrow">The answer to the challenge · interoperability profile (IES method) · <span class="step-count">1 / 4</span></div>
+      <h2 tabindex="-1">Who exchanges what, in ten processes.</h2>
+      <p class="lead-small">IES (Integrating the Energy System) describes who takes part in an energy process and which information they exchange,
+         so devices from different manufacturers work together. A rough, reusable profile, not a full specification.</p>
+      <ul class="actors" aria-label="Actors">
+        <li data-act="dso">Grid operator</li><li data-act="box">Box + household</li><li data-act="inv">Battery inverter</li>
+        <li data-act="sup">Supplier</li><li data-act="price">Price authority (E-Control)</li><li data-act="trust">Trusted authority</li>
+        <li data-act="sub">Subsidy body</li><li data-act="agg">Aggregator</li>
+      </ul>
+      <div class="phases">
+        <article data-at="0" data-acts="box trust dso sub">
+          <h3>Set up</h3>
+          <p><b>P1 Commissioning</b>: certified modules, first test call; first half of the subsidy is paid.</p>
+          <p><b>P9 Segment</b>: the grid operator assigns the box to its transformer.</p>
+        </article>
+        <article data-at="1" data-acts="price box dso inv">
+          <h3>Every day</h3>
+          <p><b>P2 Prices</b>: one signed price list for tomorrow, 96 quarter hours, broadcast to all boxes.</p>
+          <p><b>P3 Test call</b>: short trial, e.g. once a month (weekly in the pilot); measures what the grid operator can rely on.</p>
+        </article>
+        <article data-at="2" data-acts="dso box inv sup agg">
+          <h3>Bottleneck</h3>
+          <p><b>P4 Call</b>: one signed command per transformer: charge or discharge, power, start, maximum duration, expiry, random start delay.</p>
+          <p><b>P7 Supplier</b> is told in advance. <b>P8</b>: third-party marketers pause for that segment.</p>
+        </article>
+        <article data-at="3" data-acts="box dso sub">
+          <h3>Afterwards</h3>
+          <p><b>P5 Verification</b>: the box's signed measurement against what it would have done without the call; extra cost refunded plus a fee.</p>
+          <p><b>P6 Fallback</b> to self-consumption. <b>P10</b>: keys revoked and replaced over the air.</p>
+        </article>
+      </div>
+      <p class="ifaces"><b>Interfaces:</b> grid operator → box: OpenADR (required by the Austrian connection rules for solar systems; for batteries our proposal)
+         and a LoRaWAN radio broadcast as an extra channel · box → inverter: SunSpec, EEBUS or IEEE 2030.5 · verification: smart meter.
+         Every exchange is listed with sender, receiver, information and standard in the <a href="details#exchanges">write-up</a>.</p>
+      <p class="ifaces"><b>From basement to business park.</b> The same signed call and the same limits work for every size. Home and business batteries
+         behind the meter relieve the local transformer; large storage from 250 kW upwards sits on the medium-voltage grid, gets the call via the
+         grid operator's telecontrol link with an acknowledgement, and relieves the substation.</p>
+    </div>
+    <a class="more" href="details#proposal">Actors, processes and rules in full →</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 7 · Sicherheit und Ehrlichkeit -->
+  <section class="slide tap" data-label="Security and honesty" aria-label="Security and honesty">
+    <div class="content wide">
+      <div class="eyebrow">Security, resilience and what is real</div>
+      <h2 tabindex="-1">Thousands of batteries switching at once could harm the grid as easily as help it.</h2>
+      <div class="cols3">
+        <div class="col rise" style="--d:0">
+          <h3>What we protect against</h3>
+          <ul class="checks">
+            <li><b>Forged or replayed command:</b> the box checks signature, role, expiry, sequence number and limits itself.</li>
+            <li><b>Stolen key:</b> fixed limits in the box that no message can lift (e.g. at most 3 calls and 4 hours a day); keys revoked over the radio.</li>
+            <li><b>Radio outage, all at once:</b> random start delay, return to normal spread over about 15 minutes, fallback to self-consumption.</li>
+            <li><b>Fake prices from the home network:</b> prices only arrive signed via the box.</li>
+          </ul>
+        </div>
+        <div class="col rise" style="--d:1">
+          <h3>Where AI is used</h3>
+          <p>We trained an image-recognition model on aerial photos to find solar systems built since 2023: it finds 55 % of real systems,
+             69 % of its finds are real. We compared its results with the BOKU map roof by roof. The model result is shown on the map only; the simulation uses the BOKU data.
+             No AI decides in the call path: calls are deterministic and checkable, a grid operator releases them.</p>
+          <h3>Test region</h3>
+          <p>Steyr in Upper Austria is the region we chose to test the method. Everything runs the same for any other region with open data.</p>
+        </div>
+        <div class="col rise" style="--d:2">
+          <h3>Real, synthetic, mocked</h3>
+          <ul class="checks">
+            <li><span class="tag real">open data</span> buildings, streets, transformer sites, solar systems, real weather 2012/2017/2023</li>
+            <li><span class="tag syn">synthetic</span> low-voltage cables, some transformer sites, who has a heat pump or car</li>
+            <li><span class="tag mock">mocked</span> test-call reliability per manufacturer, battery devices</li>
+          </ul>
+          <p class="strong-note">Simulation only. Nothing was tested against live grids, devices or third-party systems.</p>
+        </div>
+      </div>
+    </div>
+    <a class="more" href="details#sources">All assumptions and data sources →</a>
+    <button class="continue" type="button">Click to continue <span>↓</span></button>
+  </section>
+
+  <!-- 8 · My battery -->
+  <section class="slide battery" data-label="My battery" aria-label="My battery">
+    <div class="content wide">
+      <div class="eyebrow">For the household · my battery</div>
+      <h2 tabindex="-1">What does it cost me, and how much do the calls wear it?</h2>
+      <div class="bat-layout">
+        <form class="bat-form" id="bat-form">
+          <div class="seg" role="radiogroup" aria-label="Subsidy scheme" id="bat-scheme">
+            <button type="button" data-v="eag2026" role="radio" aria-checked="true">Subsidy today</button>
+            <button type="button" data-v="tiered" role="radio" aria-checked="false">Tiered (our proposal)</button>
+          </div>
+          <p class="hint" id="bat-scheme-hint"></p>
+          <div id="bat-eag">
+            <label class="chk"><input type="checkbox" id="bat-newpv" checked> installed together with new or extended solar</label>
+            <label class="chk"><input type="checkbox" id="bat-eu"> made in Europe (+30 %)</label>
+          </div>
+          <div id="bat-tiered" hidden>
+            <div class="tiers" role="radiogroup" aria-label="Control level" id="bat-tier"></div>
+          </div>
+          <label>Battery size <output id="o-kwh"></output><input type="range" id="bat-kwh" min="5" max="20" step="1" value="10"></label>
+          <label>Installed price per kWh <output id="o-price"></output><input type="range" id="bat-price" min="400" max="900" step="25" value="650"></label>
+          <label>Grid calls per year <output id="o-calls"></output><input type="range" id="bat-calls" min="0" max="40" step="1" value="20"></label>
+        </form>
+        <div class="bat-out">
+          <div class="costbar" aria-hidden="true"><span class="c-sub" id="bar-sub"></span><span class="c-own" id="bar-own"></span></div>
+          <p class="costbar-legend"><span class="sw c-sub"></span>subsidy <b id="k-sub"></b> <span class="sw c-own"></span>own cost <b id="k-own"></b>
+            <span class="muted">of <span id="k-total"></span> battery and box</span></p>
+          <div class="kpis">
+            <div><b id="k-cycles"></b><span>extra full charge cycles a year from calls</span></div>
+            <div><b id="k-life"></b><span>of the battery's cycle life used by calls in 15 years</span></div>
+            <div><b id="k-income"></b><span>a year for the household, never below zero</span></div>
+          </div>
+          <p class="life-cap">Battery life: the orange part is what grid calls use up in 15 years.</p>
+          <div class="lifebar" aria-hidden="true"><span id="life-fill"></span></div>
+          <p class="note" id="bat-note"></p>
+        </div>
+      </div>
+    </div>
+    <a class="more" href="details#proposal">Subsidy sources and assumptions →</a>
+  </section>
+
+  <!-- 9 · Pilot -->
+  <section class="slide" data-label="Next step" aria-label="Next step">
+    <div class="content">
+      <div class="eyebrow">What it takes</div>
+      <h2 tabindex="-1">A pilot in Steyr: 2–3 transformer areas, 30–60 homes, one solar season.</h2>
+      <ul class="needs">
+        <li class="rise" style="--d:0"><b>The supplier is told and paid back</b> for every call that moves energy away from its plan.</li>
+        <li class="rise" style="--d:1"><b>Fixed limits in the box</b> that no message can change: how often, how long, how fast batteries react.</li>
+        <li class="rise" style="--d:2"><b>One open interface</b> for battery inverters and keys per role that can be revoked.</li>
+        <li class="rise" style="--d:3"><b>Fair compensation</b>, checked by the grid operator against smart-meter data.</li>
+      </ul>
+      <div class="links">
+        <a class="btn primary" href="details">Read the full write-up</a>
+        <a class="btn" href="details#try">Explore all 257 transformers</a>
+        <a class="btn" href="details#sources">Assumptions and sources</a>
+      </div>
+    </div>
+  </section>
+
+  <nav class="dots" id="dots" aria-label="Presentation slides"></nav>
+  <div class="sr-only" id="sr-status" aria-live="polite"></div>
+</main>
+</body>
+</html>

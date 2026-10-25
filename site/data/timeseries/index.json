@@ -1,0 +1,27 @@
+[
+ {
+  "id": "way/235746848",
+  "rolle": "schwach",
+  "datei": "timeseries/way_235746848.json"
+ },
+ {
+  "id": "node/12794591194",
+  "rolle": "typisch",
+  "datei": "timeseries/node_12794591194.json"
+ },
+ {
+  "id": "way/543897968",
+  "rolle": "pv_stark",
+  "datei": "timeseries/way_543897968.json"
+ },
+ {
+  "id": "way/490507189",
+  "rolle": "gewerbe_pv",
+  "datei": "timeseries/way_490507189.json"
+ },
+ {
+  "id": "node/11624460810",
+  "rolle": "stadt_gross",
+  "datei": "timeseries/node_11624460810.json"
+ }
+]

@@ -473,8 +473,12 @@ Befehlssignatur den Weg vom Netzbetreiber zur Box.
   Firmware-Review), und wie werden Signaturen widerrufen?
 - Rolle **Preisstelle** in der PKI: Der tägliche Preisvektor (T4, siehe
   [ems-konzept.md](ems-konzept.md)) wird von einer gemeinsamen Stelle für alle
-  Lieferanten signiert. Offen, wer das ist (EPEX, E-Control oder die Trusted
-  Authority der Box-PKI). [V] Eigene Rolle mit eigenem Zwischenzertifikat unter der
-  Root, getrennt von Modul-Signatur und VNB-Befehlsschlüssel: Ein kompromittierter
-  Preisschlüssel darf weder Steuerbefehle noch Module signieren können.
+  Lieferanten signiert.
+  - [E] **Betreiber der Preisstelle ist die E-Control** (Owner, 24.10.2026; siehe
+    [ems-konzept.md](ems-konzept.md) §1, §4.2). Offen: Rechtsgrundlage und Lizenz
+    der EPEX-Spotdaten (ems-konzept.md §8).
+  - [E] **Eigene Rolle mit eigenem Zertifikat**, getrennt vom Schlüssel für
+    Steuerbefehle (VNB) und von der Modul-Signatur (Trusted Authority); Owner,
+    23.10.2026. Ein kompromittierter Preisschlüssel kann weder Steuerbefehle noch
+    Module signieren.
 - Zielpreis der Box in Grundausstattung (Netzteil, Kern, LoRa, M-Bus, Modbus)

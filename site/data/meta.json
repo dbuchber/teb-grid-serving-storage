@@ -1,0 +1,66 @@
+{
+ "stand": "2026-10-24",
+ "hinweis": "Modellwerte, keine Messungen. Synthetische Niederspannungsnetze.",
+ "achsen": {
+  "wetterjahre": [
+   2012,
+   2017,
+   2023
+  ],
+  "szenarien": [
+   "heute",
+   "2030",
+   "2040"
+  ],
+  "pv_faktoren": [
+   1.0,
+   1.5,
+   2.0
+  ],
+  "richtungen": [
+   "einspeisung",
+   "bezug"
+  ],
+  "strategien": [
+   "base",
+   "fixcap",
+   "forecast",
+   "room",
+   "room_persist"
+  ],
+  "engpass_schluessel": "<wetterjahr>|<szenario>|<pv_faktor>|<richtung>"
+ },
+ "szenarien": {
+  "heute": {
+   "wp_share": 0.15,
+   "ev_share": 0.08
+  },
+  "2030": {
+   "wp_share": 0.35,
+   "ev_share": 0.25
+  },
+  "2040": {
+   "wp_share": 0.7,
+   "ev_share": 0.6
+  }
+ },
+ "beispielstationen": {
+  "schwach": "way/235746848",
+  "typisch": "node/12794591194",
+  "pv_stark": "way/543897968",
+  "gewerbe_pv": "way/490507189",
+  "stadt_gross": "node/11624460810"
+ },
+ "quellen": [
+  "Ortsnetzstationen: © OpenStreetMap-Mitwirkende, ODbL",
+  "Gebäude: © Österreichisches Adressregister, Stichtagsdaten 01.10.2026",
+  "PV-Anlagen: BOKU University, Zenodo doi:10.5281/zenodo.18152782, CC BY 4.0",
+  "Gebäude LoD1: Land OÖ, doris.at, CC BY 4.0",
+  "Temperatur: GeoSphere Austria, INCA",
+  "PV-Profile: EU JRC PVGIS 5.3",
+  "Wärmepumpe: when2heat, Open Power System Data, CC BY 4.0",
+  "Heizenergie je Haushalt: Statistik Austria, Energieverwendung privater Haushalte 2025–2026",
+  "Lastprofil: APCS synthload2026 H0",
+  "Umspannwerke/Kapazitäten: ebUtilities (§99 ElWG)"
+ ]
+}

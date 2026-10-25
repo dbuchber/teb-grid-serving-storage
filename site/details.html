@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Grid-Serving Storage Steyr · Details</title>
+<link rel="stylesheet" href="vendor/maplibre-gl-4.7.1/maplibre-gl.css">
+<link rel="stylesheet" href="style.css?v=20261025b">
+<link rel="stylesheet" href="js/gridsim/dashboard.css?v=20261024d">
+<script src="vendor/maplibre-gl-4.7.1/maplibre-gl-csp.js" defer></script>
+<script type="module" src="js/app.js?v=20261025d"></script>
+</head>
+<body>
+<main>
+<header>
+  <a class="backlink" href="./">← Presentation</a>
+  <span class="tag">TEB Hackathon · Challenge Grid-Serving Storage</span>
+  <a class="signout" href="/oauth2/sign_out">Sign out</a>
+  <h1>Can home batteries and electric cars relieve the local grid around Steyr?</h1>
+  <p>This page walks through our answer to the hackathon challenge step by step: the task, the terms we need,
+     how we built the simulation, which assumptions we made, which data we used, what came out, and what we propose.
+     All figures are results of a computer model built from open data, not measurements. As of 24 Oct 2026.</p>
+</header>
+<nav class="toc" aria-label="Sections">
+  <a href="#challenge">1 Task</a><a href="#terms">2 Terms</a><a href="#approach">3 Approach</a><a href="#results">4 Results</a>
+  <a href="#proposal">5 Proposal</a><a href="#try">6 Try it</a><a href="#sources">7 Assumptions and sources</a>
+</nav>
+
+<h2 id="challenge" class="part"><span>1</span> The task of the hackathon</h2>
+<section>
+<p>The challenge “Grid-Friendly / Grid-Serving Storage” starts from two developments:</p>
+<ul class="findings">
+  <li><b>More and more batteries are installed.</b> Battery prices are falling. Many households put a battery next to their rooftop
+      solar system so they can use more of their own electricity.</li>
+  <li><b>The local power grid is reaching its limits.</b> More solar systems feed in at midday; heat pumps and charging of electric cars
+      add demand in the evening and in winter. Parts of the grid will be overloaded.</li>
+</ul>
+<p class="lead"><b>The task as set by the challenge:</b> the company that runs the local grid wants to use the batteries of its customers as a simple,
+   quick measure against overloads. Normally the owner decides how the battery runs. Only in exceptional situations and for a limited time
+   may the grid company influence many batteries in one part of the grid at once. The team is to describe the processes and interfaces for this
+   as a rough “interoperability profile” using the IES method.</p>
+<p>We split this into three questions and answer them in order on this page:</p>
+<ol class="pillars">
+  <li><b>Where and when</b><span>does the grid around Steyr get overloaded, today and in the future?</span></li>
+  <li><b>Who can help</b><span>Home batteries, electric cars, or neither, and how many would it take?</span></li>
+  <li><b>How to ask</b><span>How does the grid company ask the batteries safely and fairly? This is the interoperability profile.</span></li>
+</ol>
+</section>
+
+<h2 id="terms" class="part"><span>2</span> Terms used on this page</h2>
+<section>
+<p>Every technical term on this page is explained here or in the step where it first appears.</p>
+<h3>The grid</h3>
+<dl class="terms">
+  <dt>Grid operator (DSO)</dt><dd>The company that runs the local power lines (distribution system operator). It does not sell electricity.</dd>
+  <dt>Substation</dt><dd>Large station that takes power from the high-voltage grid and passes it to the medium-voltage grid of a region.
+      On the map and in tables substations are named “UW …” (German “Umspannwerk”).</dd>
+  <dt>Medium voltage (MV)</dt><dd>Lines between the substation and the transformer stations in the streets.</dd>
+  <dt>Transformer station</dt><dd>Small station in a neighbourhood that converts medium voltage to the low voltage used in homes. We often just say “transformer”.
+      The Steyr region has 257 of them.</dd>
+  <dt>Low-voltage grid, feeder</dt><dd>The cables or overhead lines from a transformer to the houses. A transformer has several outgoing lines, called feeders.</dd>
+  <dt>Grid segment</dt><dd>One transformer together with all houses connected to it. The grid operator addresses its requests per segment.</dd>
+  <dt>kW, kWh</dt><dd>Kilowatt is power (how much at one moment), kilowatt-hour is energy (power over time). MW = 1,000 kW.</dd>
+  <dt>Reactive power, power factor, Q(U)</dt><dd>Part of the current only swings back and forth and does no useful work, but it still loads cables
+      and transformers. The power factor is the share of useful power (0.97 means 3 % is lost to this). Q(U) is a rule in the Austrian connection
+      rules: solar inverters adjust their reactive power to the local voltage.</dd>
+  <dt>kVA, rating</dt><dd>The size of a transformer, in kilovolt-amperes. For this page you can read 1 kVA as about 1 kW
+      (Austrian rules set solar inverters to no reactive power by default; we check the effect separately).
+      The rating is the power the transformer may carry continuously. For a few hours, especially when it is cold outside,
+      it may carry more without harm; step 7 checks this as well.</dd>
+  <dt>Feed-in, demand</dt><dd>Feed-in: houses send power into the grid (solar at midday). Demand: houses draw power from the grid.</dd>
+  <dt>Bottleneck, overload</dt><dd>An hour in which the power through a transformer is above its rating. “Overload hours” counts these hours per year.
+      A bottleneck is <i>thermally critical</i> if the transformer would also get too hot (step 7); only then is it urgent.</dd>
+  <dt>Curtailment</dt><dd>The grid operator limits a solar system so it feeds in less. The energy is lost.</dd>
+  <dt>Grid reinforcement</dt><dd>Replacing a transformer with a larger one or laying more cables. Expensive and slow.</dd>
+</dl>
+<h3>The devices in the houses</h3>
+<dl class="terms">
+  <dt>PV, kWp</dt><dd>Photovoltaic (solar) system on the roof. kWp (kilowatt peak) is its size: the power under full sun.</dd>
+  <dt>Inverter</dt><dd>The device between solar panels or battery and the house wiring that converts direct current into household alternating current.</dd>
+  <dt>Box</dt><dd>Our proposed control unit next to the electricity meter: it receives the grid operator's requests, checks them and controls the battery (chapter 5).</dd>
+  <dt>Home battery</dt><dd>A battery in the house, usually installed with a PV system. We count it in units of 10 kWh energy and 5 kW power.</dd>
+  <dt>Self-consumption</dt><dd>How batteries run today: store the household's own solar surplus, use it in the evening. The share of solar power used at home is the self-consumption rate.</dd>
+  <dt>Heat pump</dt><dd>Electric heating that takes heat from the air or the ground. It needs the most power on cold days.</dd>
+  <dt>Electric car (EV), wallbox</dt><dd>EV = electric vehicle. The wallbox is its charger at home.</dd>
+  <dt>Smart charging</dt><dd>The grid operator may slow down wallboxes while the transformer is full; the car is still fully charged by 7 am.</dd>
+  <dt>V2G</dt><dd>Vehicle-to-grid: a parked car not only charges but also gives power back to the grid for a while.</dd>
+</dl>
+<h3>The method</h3>
+<dl class="terms">
+  <dt>Model, simulation</dt><dd>A computer program that calculates, hour by hour, how much power flows through each transformer.</dd>
+  <dt>Synthetic</dt><dd>Generated by us from rules and open data because the real data is not public. Marked as such wherever it appears.</dd>
+  <dt>Mocked</dt><dd>Invented example data that only illustrates how a process works.</dd>
+  <dt>Scenario</dt><dd>An assumed future state: today, 2030, a moderate 2040 or the 2040 stress case, with more heat pumps, EVs and PV.</dd>
+  <dt>Weather year</dt><dd>The real weather of one past year that we run the simulation with: 2012 (cold spell), 2017, or 2023 (mild).</dd>
+  <dt>Median</dt><dd>The middle value: half of the transformers (or runs) are above it, half below.</dd>
+  <dt>Sensitivity</dt><dd>We change one assumption at a time and see how much a result moves. Large moves mark the assumptions that matter.</dd>
+</dl>
+</section>
+
+<h2 id="approach" class="part"><span>3</span> How we went about it, step by step</h2>
+<section>
+<p>No grid operator publishes its real low-voltage grid, because it is critical infrastructure. So we rebuilt the grid of the Steyr region
+   from open data and simulated it. Each step below says what we did, what we assumed and where the data comes from.
+   A complete list follows in <a href="#sources">chapter 7</a>.</p>
+</section>
+<section>
+  <h3>Step 1 · Choose a region and find its transformers</h3>
+  <p>We chose Steyr and the surrounding district Steyr-Land in Upper Austria: a town, suburbs and villages, so both strong urban and weak
+     rural grids occur. We took the positions of the 257 transformer stations and of the substations from open map data.
+     Transformers keep their OpenStreetMap identifier, for example “way/543897968”.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>Where the map data has no transformer for a group of houses, we place one synthetically (shown hollow on the map).
+        Medium-voltage lines are drawn along roads for the map only; they are not simulated.</dd>
+    <dt>Data</dt><dd>OpenStreetMap (transformer stations, roads); substation capacities from ebUtilities.</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 2 · Connect the buildings: a synthetic low-voltage grid</h3>
+  <p>Every building from the official address register is assigned to the nearest transformer in a straight line (at most 600 m away).
+     From there the cables follow the streets. We sized the transformers and feeders after three published Austrian field grids:
+     3–11 feeders per transformer, 2.8–4.6 kVA of transformer per building, cables in town, overhead lines in the countryside,
+     and an own feeder for large PV systems.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>The grids are plausible, not exact. Transformer size = the larger of 3 kVA per residential building, 2 kVA per household
+        and 0.7 kVA per kWp of today's PV, rounded up to a standard size. These are the low end of the three field grids, so our transformers
+        tend to be small; the sensitivity in chapter 4 shows what larger ones change. Because today's PV is part of the sizing,
+        today's feed-in bottlenecks are few by construction. Assigning buildings along the streets instead changes which transformer
+        they belong to for about one in seven buildings (also shown in chapter 4). PV systems from 30 kWp get their own feeder.</dd>
+    <dt>Data</dt><dd>Austrian address register (BEV); reference grids of the DG DemoNet project (Eberstalzell, Littring, Köstendorf, final report 2015)
+        and TU Wien reference feeders (2018).</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 3 · Find the solar systems on the roofs</h3>
+  <p>The BOKU University mapped the PV systems in Austria from aerial images taken 2021–23. For each roof orientation we compute the hourly
+     output with PVGIS, the EU solar calculator. To see what was built since, we trained our own image-recognition model (the AI part of this project)
+     on the BOKU outlines and ran it on the 2025 aerial images. <i>Recall</i> is the share of real systems the model finds,
+     <i>precision</i> the share of its finds that are real:</p>
+  <div class="tablewrap"><table class="small">
+    <thead><tr><th>PV detection on 310 validation tiles (separate ~1 km blocks, not trained on, but used to pick the best training round); reference: BOKU outlines 2021–23</th><th>original model</th><th>retrained</th></tr></thead>
+    <tbody>
+      <tr><td>Recall</td><td>37 %</td><td>55 %</td></tr>
+      <tr><td>Precision</td><td>58 %</td><td>69 %</td></tr>
+      <tr><td>Overlap of detected and true area</td><td>0.36</td><td>0.49</td></tr>
+      <tr><td>Detected ÷ true module area</td><td>1.28</td><td>0.85</td></tr>
+    </tbody></table></div>
+  <p>We compared the model with the BOKU outlines building by building. In Steyr and Steyr-Land the two agree on 1,706 roofs.
+     The model sees PV on 796 roofs that BOKU does not have, and none on 608 roofs that BOKU has. Many of these 796 are probably
+     systems built since 2023, but some are false detections: the model is clearly less sure about them (median confidence 0.38
+     against 0.50 for confirmed roofs), and we have not checked them by hand yet. The model was trained on the BOKU outlines
+     without manual correction. Because the reference is from 2021–23 and the images from 2025, the precision above is a lower bound.
+     A hand-labelled test set of 300 areas is in preparation.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>The simulation uses the BOKU systems; the model result is shown on the map only. Future PV growth is added synthetically (×1.5 and ×2).</dd>
+    <dt>Data</dt><dd>BOKU PV outlines (Zenodo, CC BY 4.0); BEV aerial images 2025 (CC BY 4.0); EU JRC PVGIS 5.3.</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 4 · Give some houses a home battery</h3>
+  <p>There is no public register of home batteries. We assign them by rule.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>Half of the households with PV and 20 % of farms and businesses with PV have a battery. Brands, ages and response
+        behaviour of the batteries are mocked.</dd>
+    <dt>Data</dt><dd>None public; synthetic.</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 5 · Add households, heat pumps and electric cars</h3>
+  <p>Each household gets the Austrian standard load profile. Each building gets a heating demand from its size and age; a heat pump turns that
+     into electricity, depending on the outdoor temperature. Electric cars arrive home at random times in the evening and charge what they
+     used during the day; in the cold they use more.</p>
+  <div class="tablewrap"><table class="small">
+    <thead><tr><th>Scenario</th><th>buildings with a heat pump</th><th>households with an EV</th></tr></thead>
+    <tbody><tr><td>today</td><td>15 %</td><td>8 %</td></tr><tr><td>2030</td><td>35 %</td><td>25 %</td></tr><tr><td>2040 moderate</td><td>35 %</td><td>60 %</td></tr><tr><td>2040 stress case</td><td>70 %</td><td>60 %</td></tr></tbody>
+  </table></div>
+  <p>The <b>2040 stress case</b> replaces almost every oil and gas heating outside the district-heating areas with a heat pump,
+     as climate neutrality in 2040 would require. Studies expect less: the Austrian Environment Agency projects heat pumps at over 25 %
+     of heating capacity in 2040, TU Wien about a third of heated floor area by 2050; wood and district heating stay important in Upper Austria.
+     The <b>2040 moderate</b> case keeps the heat pumps at 35 % and is closer to these studies. Unless marked otherwise, “2040” on this page
+     means the stress case: read it as an upper bound.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>Which buildings get a heat pump or an EV is random. Cars drive 12,000 km a year. Areas with district heating
+        (Münichholz, Ennsleite, Resthof, Tabor) get no heat pumps. Heat pumps are never switched off by the grid operator.
+        Building renovation until 2040 is not modelled.</dd>
+    <dt>Data</dt><dd>Standard load profile H0 (APCS); building shapes DORIS LoD1 (Land Upper Austria); heating demand per building type and age (TABULA),
+        calibrated to Statistik Austria; heat-pump efficiency per temperature (when2heat).</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 6 · Use real weather</h3>
+  <p>Sun and temperature decide both midday feed-in and winter demand. We run three real years: 2012 with a cold spell, 2017, and the mild 2023.
+     The spread between them shows how robust a result is.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>One temperature per transformer (1 km grid).</dd>
+    <dt>Data</dt><dd>GeoSphere Austria INCA, checked against the Wachtberg station near Steyr (difference ≤ 0.1 °C); PVGIS for the same years.</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 7 · Simulate every hour of the year</h3>
+  <p>For every transformer we add up, hour by hour for all 8,760 hours of a year, what its houses draw and feed in, and compare the result with
+     the transformer's rating. Bottlenecks are rare events, often only a few hours a year, so a typical day would miss them.
+     Three further checks follow:</p>
+  <ul>
+    <li><b>Heat:</b> a transformer may carry more than its rating for some hours, especially in cold weather. We compute its oil and winding
+        temperature hour by hour with the outdoor temperature (international standard IEC 60076-7 for oil transformers) and mark a bottleneck
+        as thermally critical when the transformer would get too hot or age faster than normal.</li>
+    <li><b>Voltage in summer:</b> for the 24 hours with the highest feed-in we compute the voltage along the cables, separately for each way
+        of running the batteries, once without and once with the reactive-power rule Q(U) of the Austrian connection rules.</li>
+    <li><b>Voltage in winter:</b> for the 24 hours with the highest demand we compute the voltage drop along the cables (2030 and 2040).</li>
+  </ul>
+  <p>From each bottleneck we derive what would fix it: either the number of home batteries needed, or how many standard sizes larger
+     the transformer would have to be. For the batteries we simulate a fleet that covers the overload and recharges only in hours with room
+     under the rating, counting the energy and the power of a 10 kWh / 5 kW unit with the same discounts for availability and response
+     (and for ageing on the energy). Above 1,000 kVA a transformer needs a new medium-voltage connection.</p>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>Hourly values: peaks shorter than an hour are smoothed out. Businesses only in the sensitivity (chapter 4).
+        Loads with a power factor of 0.97 in the winter load flow. All three phases loaded equally.</dd>
+  </dl>
+</section>
+<section>
+  <h3>Step 8 · Compare ways to run batteries and charge cars</h3>
+  <p>Each case is simulated once with today's behaviour and once with each alternative:</p>
+  <div class="grid2">
+  <div>
+  <h4>Home batteries</h4>
+  <dl class="terms">
+    <dt>Self-consumption</dt><dd>Today's behaviour; the baseline.</dd>
+    <dt>Fixed limit</dt><dd>The battery may never feed in above a fixed share; no forecast.</dd>
+    <dt>Grid-serving (forecast)</dt><dd>Using the next day's weather forecast, the battery keeps room free and charges during the midday peak instead of in the morning.</dd>
+    <dt>Grid-serving (night discharge)</dt><dd>As before, and it also empties at night so there is room the next day.</dd>
+    <dt>Same, simple forecast</dt><dd>As before, but the forecast is just “tomorrow like today”. Real day-ahead forecasts are better than this
+        and worse than a perfect one, so the two cases bracket reality.</dd>
+  </dl>
+  </div>
+  <div>
+  <h4>Electric cars</h4>
+  <dl class="terms">
+    <dt>Uncontrolled</dt><dd>Cars charge as soon as they arrive.</dd>
+    <dt>Everyone at 6 pm</dt><dd>Stress test: after a cold day all cars plug in at the same time (“simultaneous”).</dd>
+    <dt>WiNAP</dt><dd>A cheaper winter night tariff from 23:00 (Austrian “Winter-Niedrigpreis-Phase”); many cars then start at the same moment.</dd>
+    <dt>Dynamic grid tariff (T3d)</dt><dd>Our proposal: a discount signal per grid segment tells cars when charging is cheap for the grid.</dd>
+    <dt>Smart charging</dt><dd>The grid operator shares the room under the rating among the plugged-in cars, car by car, each at most at
+        its wallbox power; cars that leave soonest go first. What is missing at 7 am is reported as not charged.</dd>
+    <dt>V2G</dt><dd>Smart charging plus released cars giving power back while heat pumps and households alone exceed the rating:
+        at most 11 kW and 15 kWh per car and evening, 70 % of evenings released, and only as much as can be recharged by 7 am.
+        That recharging is counted at the transformer.</dd>
+  </dl>
+  </div>
+  </div>
+  <dl class="meta">
+    <dt>Assumption</dt><dd>With the perfect forecast the battery results are an upper bound; the simple forecast gives the lower bound.
+        Because heat pumps and cars are placed at random, we repeat the main winter cases with 20 different random draws (called “seeds”)
+        and give the spread from the 10 % to the 90 % value; the live simulation (chapter 6) does the same per run.</dd>
+  </dl>
+</section>
+
+<h2 id="results" class="part"><span>4</span> Results</h2>
+<section>
+<p class="note">Updated 24 Oct 2026 (evening) after an independent technical review: transformer heat check, batteries that recharge between
+   bottlenecks, cars simulated one by one, a simple forecast as lower bound, owners' electricity bills, 20 random draws, sensitivity and costs.</p>
+<ul class="findings">
+  <li><b>Summer: batteries lower the peak, but do not replace reinforcement.</b> How much depends on the forecast: With a perfect forecast and emptying at night, home batteries cut the
+      feed-in peak per transformer by 13–15 % (median, three weather years). With the simple forecast “tomorrow like today” it is only 0–6 %.
+      Real forecasts lie in between. With today's PV, 1–3 of 257 transformers have a feed-in bottleneck; with PV ×1.5 it is 19, with PV ×2 32–34.</li>
+  <li><b>It costs the owners a little.</b> With a good forecast a battery household pays about 4–5 € a year more (median; 1 in 10 pays 23 € or more),
+      with the simple forecast about 23–25 €. The compensation in chapter 5 covers this. A fixed limit without forecast would cost about 85–90 € a year.</li>
+  <li><b>Winter: batteries are the wrong tool.</b> The bottleneck comes from heat pumps and lasts for days in a cold spell; between peaks there is
+      little room to recharge. In 2040, 193–210 of 257 transformers are above their rating, depending on the weather year; about half of them
+      (90–150) would also get too hot. These numbers depend most on how large the real transformers are (see “How robust”).
+      In the <b>2040 moderate</b> case (35 % heat pumps) 152–181 are above their rating with uncontrolled charging,
+      but only <span class="good">7–30 with smart charging</span> (optimistic count, see the winter section): there the evening peak comes mainly from the cars.</li>
+  <li><b>Electric cars: smart charging solves</b> every case in which heat pumps and households alone stay below the transformer rating.</li>
+  <li><b>V2G is a reserve, not a cure.</b> At the weak rural segment in 2040 V2G cuts the overload hours from 149 to 43 a year, but the peak
+      stays 82 kW above the rating and the cars leave with <span class="bad">more energy missing (9.5 instead of 5.3 MWh a year)</span>,
+      because during a cold spell there is no room to recharge them.</li>
+  <li><b>Costs: batteries pay only where few are needed.</b> A grid-serving battery beats a larger transformer only if a segment needs no more than
+      about 6 of them (about 14–24 if the batteries already exist and only the box is paid). Most bottlenecks need far more. The best use is
+      short bottlenecks around 2030 with batteries already installed, and bridging the time until a transformer is replaced.</li>
+</ul>
+</section>
+<section>
+  <h3>Summer: feed-in grows with PV</h3>
+  <p class="takeaway good">In summer, grid-serving home batteries cut the feed-in peak by up to 15 % – but only with a good weather forecast.
+     With a poor forecast the effect almost disappears.</p>
+  <div id="chart-scen-ein" class="chartbox"></div>
+  <p class="note">Number of transformers with a feed-in bottleneck in the selected weather year.</p>
+  <h4>Peak feed-in per transformer with grid-serving batteries (weather year 2023)</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Transformers by PV size</th><th>Number</th><th>Peak change, median: fixed limit / forecast / forecast + night discharge</th><th>Forecast + night discharge with the simple forecast</th></tr></thead>
+    <tbody>
+      <tr><td>up to 50 kWp</td><td>103</td><td>0 % / −6 % / −13 %</td><td>−2 %</td></tr>
+      <tr><td>50–250 kWp</td><td>119</td><td>−2 % / −6 % / −13 %</td><td>−6 %</td></tr>
+      <tr><td>over 250 kWp</td><td>35</td><td>0 % / −1 % / −5 %</td><td>−2 %</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Same picture for the mean of the 10 highest hours instead of the single highest hour, and for the weather years 2012 and 2017
+     (−14 to −15 % with a perfect forecast). The reactive-power rule Q(U) changes neither the transformer load nor the number of
+     feeders above 3 % voltage rise noticeably. Today's few feed-in bottlenecks partly follow from how we size the transformers: without
+     today's PV in the sizing, 13 instead of 1–3 transformers would have one today.</p>
+</section>
+<section>
+  <h3>Winter: demand grows with heat pumps</h3>
+  <p class="takeaway bad">In winter, batteries alone cannot remove these bottlenecks, they can only lower the peak: heat pumps overload transformers for days in a cold spell.
+     That needs grid reinforcement, district heating and renovation – and with fewer heat pumps (2040 moderate) smart charging removes most bottlenecks.</p>
+  <div id="chart-scen-bez" class="chartbox"></div>
+  <p class="note">Number of transformers with a demand bottleneck, PV as today.</p>
+  <h4>All 257 transformers per weather year</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Weather year</th><th>today</th><th>2030</th><th>2040 stress case</th><th>Home batteries needed 2040</th><th>Transformers 2040: 1 size larger / 2 or more / above 1,000 kVA</th></tr></thead>
+    <tbody>
+      <tr><td>2023 (mild)</td><td>2 (0)</td><td>39 (4)</td><td>193 (90)</td><td>116,595</td><td>81 / 63 / 49</td></tr>
+      <tr><td>2017</td><td>4 (0)</td><td>51 (3)</td><td>200 (104)</td><td>457,065</td><td>70 / 80 / 50</td></tr>
+      <tr><td>2012 (cold spell)</td><td>5 (0)</td><td>90 (8)</td><td>210 (150)</td><td>1,318,540</td><td>45 / 100 / 65</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Transformers above their rating; in brackets those that would also get too hot (IEC 60076-7 with the outdoor temperature).
+     Batteries counted as a fleet that recharges in hours with room under the rating; in a cold spell there is little such room, so the need is
+     even higher than with our first, simpler count. At a weak rural transformer the overload hours rise from 2 per year in 2030 to 302 in 2040.</p>
+  <h4>2040 stress case vs. 2040 moderate (live simulation, median of 20 random draws)</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Weather year</th><th>Moderate (35 % heat pumps): uncontrolled</th><th>with smart charging</th><th>Stress case (70 %): uncontrolled</th><th>with smart charging</th></tr></thead>
+    <tbody>
+      <tr><td>2023 (mild)</td><td>152</td><td class="good">7</td><td>193</td><td>103</td></tr>
+      <tr><td>2017</td><td>166</td><td class="good">14</td><td>199</td><td>133</td></tr>
+      <tr><td>2012 (cold spell)</td><td>181</td><td class="good">30</td><td>208</td><td>166</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Transformers above their rating; no transformer heat check in the live simulation. With half as many heat pumps,
+     smart charging removes most winter bottlenecks; in the stress case the heat pumps alone exceed many transformers.
+     Smart charging is pooled per transformer here: the delayed energy of all cars is caught up wherever there is room, without a limit per
+     wallbox or per car. That is an upper bound for its effect, so the remaining counts are rather too low. Our car-by-car model shows the
+     same picture at the example transformers, but has not been run for all of them yet.</p>
+  <p class="note"><b>Voltage in winter: our synthetic grids are not good enough.</b> The load flow for the hours with the highest demand shows
+     a voltage drop above 5 % at about 165 of 257 transformers already <i>today</i>, and at 19–27 the calculation does not converge. Real grids
+     work today, so our synthetic feeders (median longest feeder about 1 km, along the streets) are too long and too weak. Statements on
+     winter voltage need the grid operator's real grid; the results per transformer above are not affected.</p>
+</section>
+<section>
+  <h3>How robust are these numbers?</h3>
+  <p>We changed one assumption at a time for 2040, weather year 2017 (reference: 200 transformers above their rating, 104 thermally critical),
+     and repeated the main cases with 20 random draws of where heat pumps and cars are.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th class="l">Change</th><th>Above rating</th><th>Thermally critical</th></tr></thead>
+    <tbody>
+      <tr><td class="l">Reference</td><td>200</td><td>104</td></tr>
+      <tr><td class="l">20 random draws, 10–90 % range</td><td>199–205</td><td>105–119</td></tr>
+      <tr><td class="l">Transformers sized at the middle of the field grids (3.8 kVA per building, 2.8 per household)</td><td>165</td><td>31</td></tr>
+      <tr><td class="l">Transformers sized at the top of the field grids (4.6 / 3.6)</td><td class="good">99</td><td class="good">25</td></tr>
+      <tr><td class="l">Heat pumps in 35 % (2040 moderate); gridsim, median of 20 draws (its reference for 70 %: 199)</td><td>166</td><td>–</td></tr>
+      <tr><td class="l">Heat pumps in 50 % instead of 70 % of buildings</td><td>183</td><td>55</td></tr>
+      <tr><td class="l">Heat pumps in 85 %</td><td>208</td><td>142</td></tr>
+      <tr><td class="l">Heating demand −35 % (renovation until 2040)</td><td>180</td><td>38</td></tr>
+      <tr><td class="l">Electric heating rod from −3 °C instead of −7 °C</td><td>206</td><td>133</td></tr>
+      <tr><td class="l">Electric heating rod only below −15 °C</td><td>199</td><td>98</td></tr>
+      <tr><td class="l">EVs in 40 % / 80 % of households instead of 60 %</td><td>183 / 206</td><td>68 / 142</td></tr>
+      <tr><td class="l">8 instead of 5 households per apartment building</td><td>216</td><td>114</td></tr>
+      <tr><td class="l">Businesses added as load, transformers not larger</td><td>207</td><td>125</td></tr>
+      <tr><td class="l">Businesses added, transformers sized for them</td><td>132</td><td>48</td></tr>
+      <tr><td class="l">Buildings assigned along the streets instead of in a straight line</td><td>193</td><td>100</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Chance hardly matters (±3 transformers). The size of the real transformers matters most, followed by heat-pump share and
+     renovation. The direction is robust (many winter bottlenecks in 2040), the exact count is not. Other random-draw ranges: 2030 weather 2017
+     50–61 (1–3 thermally critical), 2040 weather 2012 207–213 (152–162).</p>
+</section>
+<section>
+  <h3>Electric cars on a winter evening: smart charging and V2G</h3>
+  <p class="takeaway good">Smart charging is the strongest lever for electric cars: it solves every case except where heat pumps alone
+     already exceed the transformer. V2G then only shortens the overload, and the cars leave with less charge.</p>
+  <p>Two example transformers: a weak rural one (250 kVA, longest feeder 714 m, 100 households) and a typical urban one (400 kVA).
+     Coldest day of weather year 2012 and the day after. Each chart compares the ways of charging from step 8; cars are simulated one by one.</p>
+  <label>EV charging <select id="sel-v2g-fall"><option value="ungesteuert">as usual (staggered arrival)</option>
+    <option value="gleichzeitig">everyone plugs in at 6 pm</option></select></label>
+  <figure data-szenario="2030" data-rolle="schwach">
+    <div class="chartbox v2g" role="img" aria-label="Power at the transformer 2030, weak segment: uncontrolled, smart charging, V2G"></div>
+    <figcaption>2030, weak rural segment: one short bottleneck. Smart charging alone keeps the transformer below 250 kVA; V2G is not needed.</figcaption>
+  </figure>
+  <figure data-szenario="2040" data-rolle="schwach">
+    <div class="chartbox v2g" role="img" aria-label="Power at the transformer 2040, weak segment: uncontrolled, smart charging, V2G"></div>
+    <figcaption>2040, weak rural segment: heat pumps and households alone already exceed the transformer. V2G shortens the overload but cannot remove it; only grid reinforcement helps here.</figcaption>
+  </figure>
+  <figure data-szenario="2040" data-rolle="typisch">
+    <div class="chartbox v2g" role="img" aria-label="Power at the transformer 2040, typical urban station"></div>
+    <figcaption>2040, typical urban station (400 kVA): smart charging fully solves the bottleneck.</figcaption>
+  </figure>
+  <p class="note" id="v2g-note">Charts load with the page data.</p>
+  <h4>The cases compared</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Case</th><th>Peak (× rating)</th><th>Overload h/yr</th><th>Home batteries needed</th><th class="l">Smart charging</th><th class="l">Smart charging + V2G (cars in the segment)</th></tr></thead>
+    <tbody>
+      <tr><td>2030 weak, uncontrolled</td><td>264 kW (1.05)</td><td>2</td><td>8</td><td class="l good">solves</td><td class="l">not needed</td></tr>
+      <tr><td>2030 weak, everyone at 6 pm</td><td>370 kW (1.48)</td><td>2</td><td>59</td><td class="l good">solves</td><td class="l">not needed</td></tr>
+      <tr><td>2030 typical, everyone at 6 pm</td><td>655 kW (1.64)</td><td>1</td><td>125</td><td class="l good">solves</td><td class="l">not needed</td></tr>
+      <tr><td>2040 weak, uncontrolled</td><td>483 kW (1.93)</td><td>302</td><td>2,397</td><td class="l bad">149 h left, up to 86 kW over; 5.3 MWh not charged</td><td class="l bad">43 h left, up to 82 kW over; 13 cars at most; 9.5 MWh not charged</td></tr>
+      <tr><td>2040 typical, uncontrolled</td><td>598 kW (1.50)</td><td>84</td><td>176</td><td class="l good">solves</td><td class="l">not needed</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">“× rating” = peak divided by the transformer rating; 1.93 means 93 % above the rating. “Not charged” = energy the cars lack
+     at 7 am over the year. V2G only feeds back what can be recharged by 7 am with the wallbox; in a cold spell the grid has no room for that,
+     so more energy stays missing.</p>
+</section>
+<section>
+  <h3>Costs: batteries, larger transformers or curtailment?</h3>
+  <p class="takeaway mid">Batteries pay off only where a few are enough: short peaks, batteries that are already installed,
+     or as a bridge until the transformer is replaced. For long bottlenecks a larger transformer or some curtailment is cheaper.</p>
+  <p>For every transformer with a bottleneck we compared the yearly cost of three remedies: a larger transformer (spread over 40 years),
+     grid-serving batteries (box and extra subsidy spread over 15 years, operation, compensation per shifted kWh) and, in summer, curtailing PV
+     (value of the lost energy).</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th class="l">Case</th><th>Transformers</th><th>Cheapest: larger transformer / curtailment / batteries</th><th>Batteries needed (median)</th><th>Batteries cheaper up to</th></tr></thead>
+    <tbody>
+      <tr><td class="l">Summer, PV ×1.5</td><td>19</td><td>7 / 12 / 0</td><td>122</td><td>6</td></tr>
+      <tr><td class="l">Summer, PV ×2</td><td>34</td><td>18 / 16 / 0</td><td>173</td><td>6</td></tr>
+      <tr><td class="l">Winter 2030, cold spell 2012</td><td>90</td><td>81 / – / 9</td><td>36</td><td>4</td></tr>
+      <tr><td class="l">Winter 2030, batteries already there (only the box paid)</td><td>90</td><td>52 / – / <b>38</b></td><td>36</td><td>14</td></tr>
+      <tr><td class="l">Winter 2040, weather 2017</td><td>200</td><td>194 / – / 6</td><td>260</td><td>7</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Costs are orders of magnitude, not quotes, and must be checked with a grid operator: transformer replacement 20,000 € (one size)
+     or 35,000 € (two or more), new station above 1,000 kVA 120,000 €, box 600 €, extra subsidy 2,000 € per battery, operation 20 € per box and
+     year, compensation 15 ct per shifted kWh, curtailed energy 8 ct/kWh, interest 4 %. The counts include the discounts for availability and
+     response; with more reliable batteries fewer are needed. The 2,000 € extra subsidy is below our tiered proposal in chapter 5:
+     at tier 2, a 10 kWh battery for 6,500 € would get about 5,200 € instead of 1,500 € today, about 3,700 € extra. With that, batteries
+     would win at even fewer segments.</p>
+</section>
+
+<h2 id="proposal" class="part"><span>5</span> Our proposal: borrow batteries for short peaks</h2>
+<section>
+<p class="lead"><b>The grid operator borrows home batteries for short periods with a signed request, and the household never loses money.</b></p>
+<p>The results say where this helps: against short peaks, where batteries are already installed, and as a bridge until a transformer is
+   replaced. For long-lasting bottlenecks a larger transformer or some curtailment is cheaper (chapter 4, costs). Where batteries help,
+   they are already in place, but they run for self-consumption and are often full by late morning, just before the peak.
+   Nobody can ask them to wait, because there is no standard way to ask: Austrian law requires a control interface for solar systems
+   since 1 June 2026 (§ 76 of the Electricity Act ElWG), but not for batteries, and every manufacturer uses its own protocol, often via its cloud.
+   And because thousands of batteries switching at once could harm the grid as easily as help it, every request must be protected.</p>
+<h3>New terms for this chapter</h3>
+<dl class="terms">
+  <dt>Signed</dt><dd>Carries a digital signature: a cryptographic proof of who sent a message and that nobody changed it. Each sender has its own key and certificate.</dd>
+  <dt>The box</dt><dd>A small control unit next to the electricity meter that receives requests, checks them and controls the battery.
+      Its energy manager is the software that decides when the battery charges and discharges.</dd>
+  <dt>Call, test call</dt><dd>A call is a request from the grid operator to the batteries of one segment. A test call is a short, regular trial run that measures how reliably they respond.</dd>
+  <dt>Smart meter</dt><dd>The digital electricity meter that records consumption and feed-in every 15 minutes.</dd>
+  <dt>LoRaWAN, OpenADR</dt><dd>LoRaWAN is a low-power radio network that reaches many devices at once without internet. OpenADR is an existing internet standard for sending such requests.</dd>
+  <dt>Day-ahead price</dt><dd>The electricity price for each quarter hour of tomorrow, set at the power exchange (EPEX) the day before.</dd>
+  <dt>IES, interoperability profile</dt><dd>IES (Integrating the Energy System) is a method to describe who exchanges which information in an energy process,
+      so devices from different manufacturers work together. The result is an interoperability profile.</dd>
+</dl>
+<ol class="pillars flow" aria-label="How a call works, step by step">
+  <li><b>Box</b><span>Modular, certified, LoRaWAN by default. Checks every command itself.</span></li>
+  <li><b>Signed call</b><span>One message per segment, with limits and expiry. No manufacturer cloud in the path.</span></li>
+  <li><b>Test calls</b><span>Short, regular, measured: how much power can the grid operator rely on?</span></li>
+  <li><b>Verification</b><span>Smart meter and the box's own meter confirm what really happened.</span></li>
+  <li><b>Subsidy and refund</b><span>More control allowed, more subsidy. Any extra cost from a call is refunded.</span></li>
+</ol>
+<p class="note">Scope: designed for the EU, piloted in Austria with the Steyr region as demo area.</p>
+</section>
+<section>
+<h3>The interoperability profile “Grid-Serving Storage”</h3>
+<p>A rough profile following the IES method: who takes part, which processes run, which information is exchanged, and which rules protect
+   customer and grid. It is deliberately not a full specification.
+   <span class="tag st-fixed">decided</span> = decided by the team, <span class="tag st-prop">proposal</span> = proposal,
+   <span class="tag st-open">open</span> = still to clarify.</p>
+
+<h4>Actors and what they may sign</h4>
+<p class="note">Each role has its own certificate and may only sign its own documents. No role can issue another role's documents.
+   T1–T5 are the parts of the electricity price, each signed by whoever sets it.</p>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th>Actor</th><th>Role in the profile</th><th>Signs</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><b>Grid operator (DSO)</b></td><td>Detects bottlenecks per segment, sends calls and test calls, verifies, pays compensation</td>
+        <td>Calls and test calls; grid tariff (T3)</td><td><span class="tag st-fixed">decided</span></td></tr>
+    <tr><td><b>Supplier</b></td><td>Sells electricity to the household; works with the grid operator</td><td>Purchase price formula (T1), levies (T5)</td><td><span class="tag st-fixed">decided</span></td></tr>
+    <tr><td><b>Feed-in buyer</b></td><td>Buys the household's solar surplus</td><td>Feed-in price formula (T2)</td><td><span class="tag st-fixed">decided</span></td></tr>
+    <tr><td><b>Price authority</b>, run by E-Control, the Austrian energy regulator</td><td>Publishes one signed day-ahead price list for all boxes</td>
+        <td>Price list (T4)</td><td><span class="tag st-fixed">decided</span> legal basis and EPEX licence <span class="tag st-open">open</span></td></tr>
+    <tr><td><b>Trusted authority</b></td><td>Tests and certifies box modules; any manufacturer may build modules</td><td>Module certificates and software approval</td><td><span class="tag st-fixed">decided</span></td></tr>
+    <tr><td><b>Household</b> and its box</td><td>Owns the battery; sets its own preferences, e.g. via the home-automation software Home Assistant</td><td>Its own measurements (optional meter module) and the comparison run for compensation</td><td><span class="tag st-fixed">decided</span> own preferences, Home Assistant only via its own module; <span class="tag st-prop">proposal</span> signed measurement and comparison run</td></tr>
+    <tr><td><b>Subsidy body</b>: the federal government</td><td>Pays the battery subsidy in instalments based on measured grid service, through its funding agency</td><td>Subsidy decisions and instalments</td><td><span class="tag st-fixed">decided</span> government; <span class="tag st-open">open</span> which funding agency runs it</td></tr>
+    <tr><td><b>Price forecaster</b></td><td>Supplies an electricity price forecast beyond the day-ahead auction, for the reservation the day before (tier 3 of the subsidy, see below) and for planning calls</td>
+        <td>Price forecast profile</td><td><span class="tag st-prop">proposal</span> built from public futures prices of the EEX energy exchange (prices agreed today for delivery weeks or months ahead) or a paid market-data service (e.g. Montel, ICIS)</td></tr>
+  </tbody>
+</table></div>
+
+<h4>Processes P1–P6</h4>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th>Process</th><th>Trigger</th><th>What is exchanged</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td><b>P1 Commissioning</b></td><td>Box installed with a subsidised battery</td>
+        <td>Module certificates, list of installed modules, first test call</td>
+        <td>Box registered in its segment; first half of the subsidy paid after the first successful test call <span class="tag st-prop">proposal</span></td></tr>
+    <tr><td><b>P2 Daily prices</b></td><td>After the day-ahead auction</td>
+        <td>Price list T4: 96 quarter-hour values, about 180 bytes including signature, broadcast to all boxes over LoRaWAN in several small pieces</td>
+        <td>The box computes its own purchase and feed-in price from T1–T5. Purchase: (a·exchange price + b + grid tariff + levies) × (1 + VAT).
+          Feed-in: a·exchange price − b. <b>a</b> is the supplier's (or buyer's) percentage factor on the exchange price, <b>b</b> a fixed amount
+          per kWh for its costs and margin; both are set in the customer's contract and signed in T1 and T2.
+          Example: purchase a = 1.03, b = 1.5 ct/kWh, as in Austrian dynamic hourly tariffs; feed-in a = 1.0, b = 1 ct/kWh (assumption).
+          <span class="tag st-fixed">decided</span> prices arrive signed and only via the box, T4 from the E-Control price authority; <span class="tag st-prop">proposal</span> size and LoRaWAN transport (to be checked)</td></tr>
+    <tr><td><b>P3 Test call</b></td><td>Regularly, e.g. 15 min once a month, weekly in the pilot <span class="tag st-prop">proposal</span></td>
+        <td>Signed target power to the segment; response measured by smart meter and box</td>
+        <td>Reliability and response time per device and manufacturer group</td></tr>
+    <tr><td><b>P4 Bottleneck call</b></td><td>Forecast or measured bottleneck at a transformer</td>
+        <td>One signed command per segment: direction, target power, start, maximum duration, expiry, limits, random start delay</td>
+        <td>Batteries charge (feed-in peak) or discharge (demand peak) within their limits. <span class="tag st-prop">proposal</span> command format</td></tr>
+    <tr><td><b>P5 Verification and compensation</b></td><td>After every call and test call</td>
+        <td>Signed measurement of the box; a repeatable, signed calculation of what the box would have done without the call</td>
+        <td>Extra cost refunded plus a fee, monthly as a credit on the grid bill. <span class="tag st-fixed">decided</span> customer never worse off; <span class="tag st-prop">proposal</span> signed comparison run and monthly credit; <span class="tag st-open">open</span> fee level</td></tr>
+    <tr><td><b>P6 Fallback</b></td><td>No valid prices, no sign of life from the grid operator, invalid signature</td>
+        <td>–</td><td>Box falls back to plain self-consumption; invalid or expired commands are ignored. <span class="tag st-prop">proposal</span></td></tr>
+  </tbody>
+</table></div>
+<p class="note">Profile v2 adds P7 Balance group (the supplier's balance group is told before and after each call and paid back), P8 Third-party marketers
+   (blocking windows per segment so an aggregator never works against a call), P9 Segment assignment (box ↔ transformer, from the meter point,
+   not from coordinates) and P10 Keys (revocation, key change, decommissioning, box swap).</p>
+
+<h4 id="exchanges">Information exchanges: who sends what to whom</h4>
+<p class="note">The core of the IES view: each exchange between two actors, the information object, the process and the standard or channel.
+   Field lists and byte sizes are in profile v2; they are not part of this rough profile.</p>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th>From → to</th><th>Information object</th><th>Process</th><th>Standard / channel</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Trusted authority → box</td><td>Module certificates, firmware approval</td><td>P1, P10</td><td>X.509, local service channel at commissioning</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Installer → grid operator</td><td>Meter point, box identity, list of modules</td><td>P1, P9</td><td>Commissioning portal of the grid operator</td><td><span class="tag st-open">open</span></td></tr>
+    <tr><td>Grid operator → box</td><td>Signed segment assignment (box, segment, valid from)</td><td>P9</td><td>LoRaWAN unicast, adds the box to its segment's multicast group</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Supplier, feed-in buyer → box</td><td>Tariff formulas T1, T2, levies T5</td><td>P2</td><td>Signed, at contract start and on change</td><td><span class="tag st-fixed">decided</span></td></tr>
+    <tr><td>Price authority → all boxes</td><td>Price list T4, 96 quarter hours of tomorrow</td><td>P2</td><td>LoRaWAN multicast in fragments</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Grid operator → boxes of a segment</td><td>Test call or bottleneck call: direction, power, start, duration, expiry, limits, start window</td><td>P3, P4</td><td>OpenADR event (TOR interface) or LoRaWAN multicast</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Box → battery inverter</td><td>Storage setpoint, feed-in and demand limits, ramp, fallback value</td><td>P4, P6</td><td>SunSpec Modbus, EEBUS LPC/LPP, IEEE 2030.5 (one is required)</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Battery inverter → box</td><td>Power, state of charge, operating state, nameplate</td><td>P3–P5</td><td>same</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Smart meter → grid operator</td><td>15-minute values of the meter point</td><td>P3, P5</td><td>Existing metering process, with the customer's consent</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Box → grid operator</td><td>Signed preferences and state-of-charge trace for the comparison run</td><td>P5</td><td>Optional IP module or service visit</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Grid operator → household</td><td>Compensation statement, monthly credit</td><td>P5</td><td>Grid bill, customer portal</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Grid operator → balance group, supplier</td><td>Planned and measured shifted energy per balance group and quarter hour</td><td>P7</td><td>EDA market messages (ebUtilities) or bilateral</td><td><span class="tag st-open">open</span> whether an EDA process fits</td></tr>
+    <tr><td>Aggregator ↔ grid operator</td><td>Pool membership per meter point ↔ blocking windows per segment</td><td>P8</td><td>Not defined yet</td><td><span class="tag st-open">open</span></td></tr>
+    <tr><td>Certificate authority → all boxes</td><td>Epoch and revocation message</td><td>P10</td><td>LoRaWAN multicast, three times in 24 h</td><td><span class="tag st-prop">proposal</span></td></tr>
+    <tr><td>Grid operator → large storage</td><td>Same call, with acknowledgement (accept, reject, partial)</td><td>P4</td><td>Telecontrol IEC 60870-5-104 or OpenADR 3 (see below)</td><td><span class="tag st-prop">proposal</span>, unconfirmed for Austria</td></tr>
+  </tbody>
+</table></div>
+
+<h4>One call, step by step (P4 and P5)</h4>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th>#</th><th>From → to</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Grid operator (internal)</td><td>Forecast or measurement shows a bottleneck at a transformer; the operator releases one signed call for that segment</td></tr>
+    <tr><td>2</td><td>Grid operator → balance group, aggregator</td><td>Pre-notice (P7) and blocking window (P8)</td></tr>
+    <tr><td>3</td><td>Grid operator → boxes of the segment</td><td>The call, sent twice</td></tr>
+    <tr><td>4</td><td>Box (internal)</td><td>Checks signature, role, segment, sequence number, expiry and its fixed limits; otherwise ignores the call</td></tr>
+    <tr><td>5</td><td>Box → inverter</td><td>After a random start delay, ramps to the target power and holds it within the state-of-charge limits</td></tr>
+    <tr><td>6</td><td>Box → inverter</td><td>At the end, each box waits a random offset and ramps back to self-consumption</td></tr>
+    <tr><td>7</td><td>Smart meter → grid operator</td><td>15-minute values the next day; no confirmation per box over the radio</td></tr>
+    <tr><td>8</td><td>Grid operator (internal)</td><td>Runs the published comparison calculation against the comparison households</td></tr>
+    <tr><td>9</td><td>Grid operator → household, balance group</td><td>Monthly credit to the household; measured shifted energy to the balance group</td></tr>
+  </tbody>
+</table></div>
+<p class="note"><b>Conformance</b> <span class="tag st-prop">proposal</span>: every box and every grid-operator system is tested against published test messages
+   (valid, expired, replayed, wrong segment, wrong role, over the limits) at a joint test event. Only the valid message may cause an action.
+   Inverter interfaces are tested against the minimum values S1–S5 and R1–R5 of profile v2.</p>
+
+<div class="grid2">
+<div>
+<h4>Priority inside the box</h4>
+<ol class="prio">
+  <li>Safety and fallback (battery protection, temperature)</li>
+  <li>Signed call of the grid operator</li>
+  <li>Minimum reserve kept for calls</li>
+  <li>The household's own preferences</li>
+  <li>Self-consumption</li>
+</ol>
+<p class="note">The household sets eight preferences (price thresholds for charging and feed-in, backup reserve for power cuts, maximum power,
+   charging from the grid on/off, trading on price differences on/off, minimum price difference, paid discharge calls on/off). Calls may override some of them
+   for a limited time and always show source, reason, start and end. The backup reserve is never overridden.</p>
+</div>
+<div>
+<h4>Security rules</h4>
+<ul class="findings">
+  <li>Every command is checked <b>in the box</b>: signature, role, expiry, sequence number, limits.</li>
+  <li>Prices outside −50 … +100 ct/kWh are rejected. A fake price via Home Assistant has no effect, because prices only arrive signed via the box.</li>
+  <li>Home Assistant connects through its own channel only, with no route to the core module or the grid operator's channel.</li>
+  <li>Modules run signed software and talk to the core over an authenticated internal bus, as in cars. Unapproved modules are switched off.</li>
+  <li>Random start delays and staggering within a segment prevent the box from creating a new peak.</li>
+</ul>
+</div>
+</div>
+
+<h4>Subsidy by how much control the household allows</h4>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th>Tier</th><th>What the household allows</th><th>Battery subsidy <span class="tag st-open">placeholder</span></th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td>No control interface</td><td>40 %, box not subsidised</td></tr>
+    <tr><td>1</td><td>Controllable in charge direction, test calls</td><td>60 %</td></tr>
+    <tr><td>2</td><td>Controllable in both directions, test calls</td><td>80 %</td></tr>
+    <tr><td>3</td><td>Tier 2 plus paid discharge to the grid and reservation the day before. Until feed-in from batteries is approved
+     (metering rules), tier 3 is reachable without paid discharge <span class="tag st-fixed">decided</span></td><td>100 %</td></tr>
+  </tbody>
+</table></div>
+<p class="note"><span class="tag st-fixed">decided</span> The subsidy rises with controllability and is paid in full only at the highest tier.
+   The box including installation is fully subsidised from tier 1. A protected backup reserve does not count against the tier
+   (its size limit is preliminary); heat pumps are not part of it.
+   <span class="tag st-prop">proposal</span> Half at commissioning, the rest in yearly instalments based on reachability and test-call reliability.</p>
+
+<h4>Compensation: the customer is never worse off</h4>
+<p>Compensation = max(0, extra purchase cost − extra feed-in revenue) + wear allowance × energy shifted, plus a fee for the call.
+   The comparison is what the box's own energy manager would have done without the call, using the household's preferences from 24 hours before
+   (so nobody can game it). <span class="tag st-fixed">decided</span> principle; wear allowance 5 ct/kWh <span class="tag st-prop">proposal</span>;
+   fee level <span class="tag st-open">open</span>.</p>
+
+<h4>The box</h4>
+<p>Modules on a standard mounting rail next to the meter: power supply; a core module (microcontroller with a security chip, the only part that creates commands
+   for the battery); four identical radio and network slots (LoRaWAN as standard, mobile radio or Ethernet for Home Assistant optional); meter interface;
+   wired connections to the battery's inverter; optional own signed meter. Any manufacturer may build modules; only the trusted authority may approve them.</p>
+
+<h4>Fit with existing rules</h4>
+<ul class="findings">
+  <li>Builds on § 76 ElWG (control interface for solar systems) and closes the gap for batteries through the subsidy condition.</li>
+  <li>The Austrian connection rules for small generators (TOR Typ A V1.4, valid from 1 June 2026, chapter 5.4.1) require a direct line from the
+      grid operator to a digital interface in the customer's installation, using OpenADR (the Austrian protocol is due by the end of 2026),
+      no third-party systems such as manufacturer clouds in between, the target power within one minute, and a fallback to 70 % of the module
+      peak power if communication fails. They have no battery setpoint. Our box can serve as that interface; LoRaWAN as an extra broadcast
+      channel needs a justification in the full profile.</li>
+  <li><span class="tag st-prop">proposal</span> The dynamic grid tariff per segment (T3d, discount only, step 8) as a voluntary first step before signed calls.
+      Grid tariffs are set today per grid level and area by regulation; a tariff per transformer would need a change to that regulation.</li>
+</ul>
+<h4 id="large">Business and large storage</h4>
+<p>The challenge covers storage from homes to large systems at business sites. The processes P1–P10 and the call stay the same for every size.
+   What changes with size is the channel, the contract, the verification and the grid level where the storage helps. <span class="tag st-prop">proposal</span></p>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th></th><th>Home</th><th>Business, behind the meter</th><th>Large storage</th></tr></thead>
+  <tbody>
+    <tr><td><b>Power</b></td><td>up to 30 kW</td><td>30–250 kW</td><td>from 250 kW (EU grid code type B)</td></tr>
+    <tr><td><b>Relieves</b></td><td>local transformer and feeder</td><td>local transformer and feeder</td><td>medium-voltage line and substation</td></tr>
+    <tr><td><b>Call arrives via</b></td><td>box: OpenADR or radio broadcast</td><td>box or certified building energy manager</td><td>grid operator's telecontrol (IEC 60870-5-104) or OpenADR 3, one by one with acknowledgement</td></tr>
+    <tr><td><b>Verified against</b></td><td>smart meter and the published comparison run</td><td>smart meter or load-profile meter</td><td>the schedule declared the day before (new process P11)</td></tr>
+    <tr><td><b>Contract</b></td><td>subsidy by tier</td><td>subsidy or simple flexibility contract</td><td>flexible grid connection under the new Electricity Act (P12), cost-based compensation of lost market revenue</td></tr>
+    <tr><td><b>Main risk</b></td><td>many small devices switching at once</td><td>as home</td><td>one stolen key moves several MW at once: key per site, acknowledgement with plausibility check, two-person release</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Large storage helps one grid level higher: it does not relieve the overloaded local transformers of chapter 4, but substations with no
+   free capacity. In open grid-capacity data one substation in our region (UW Steyr Nord) already has no free feed-in capacity. Business and large storage
+   are not simulated yet; telecontrol details for Austria are unconfirmed.</p>
+<h4 id="pilot">What a pilot still needs</h4>
+<p>The hackathon profile shows the idea. A grid operator needs more before testing it on real homes:</p>
+<ul class="findings">
+  <li><b>Supplier and balance group.</b> The balance group is the supplier's account in which bought and sold energy must match every quarter hour.
+      Each call moves energy away from the supplier's plan, so the supplier is told in advance and
+      paid back afterwards. Batteries already sold to other flexibility markets need clear rules for when the grid operator's call comes first.</li>
+  <li><b>Fixed limits in the box.</b> Limits that no signed message can change cap how often, how long and how fast batteries react
+      (for example at most 3 calls and 4 hours a day). At the end of a call and after a radio outage, batteries return to normal operation
+      spread over about fifteen minutes rather than all at once. A stolen key or a radio outage therefore cannot cause a sudden jump on the grid.</li>
+  <li><b>Radio only for broadcasts.</b> LoRaWAN carries only short broadcasts such as prices and calls: a signed price list needs four radio
+      packets and about 11 seconds of airtime at the slowest setting. It cannot carry confirmations or meter readings from thousands of homes,
+      so results are checked with the existing smart meters.</li>
+  <li><b>Fair compensation, checked by the grid operator.</b> The grid operator runs the published comparison calculation, not the box,
+      and checks it against smart-meter data and comparison households.</li>
+  <li><b>Interfaces and keys.</b> A minimum battery-inverter interface using one of the open standards SunSpec, EEBUS or IEEE 2030.5, certificates per role with a way to
+      revoke them over the radio, and signed device software (firmware) that cannot be swapped back to an older, weaker version.</li>
+  <li><b>A first pilot</b> in Steyr would cover two or three transformer areas with 30 to 60 homes for one solar season.</li>
+</ul>
+<p class="note">Details: interoperability profile v2 in the project repository (actors, processes P7–P10, limits, certificate system, LoRaWAN airtime, pilot plan).</p>
+</section>
+
+<h2 id="try" class="part"><span>6</span> Try it yourself</h2>
+<section class="demo" id="demo">
+  <h3>Map: where does the grid get tight, and who helps?</h3>
+  <p class="howto"><b>How to use:</b> pick a scenario above the map. Coloured transformers have a bottleneck; click one, or a row in the table below,
+     and step through the processes P4 and P5 from chapter 5. Zoom in to see the synthetic low-voltage lines (from zoom 14) and house connections (from zoom 16);
+     click a PV point for its details.</p>
+  <form class="controls">
+    <label>Scenario <select id="sel-szenario"><option value="heute">today</option><option value="2030">2030</option><option value="2040">2040 stress case</option></select></label>
+    <label>PV build-out <select id="sel-pv"><option value="1.0">as today (BOKU)</option><option value="1.5">×1.5</option><option value="2.0">×2</option></select></label>
+    <label>Weather year <select id="sel-jahr"><option value="2023">2023 (mild)</option><option value="2017">2017</option><option value="2012">2012 (cold spell)</option></select></label>
+    <label>Direction <select id="sel-richtung"><option value="einspeisung">feed-in (summer)</option><option value="bezug">demand (winter)</option></select></label>
+    <label class="chk"><input type="checkbox" id="chk-pv" checked> PV and batteries per building</label>
+    <label class="chk"><input type="checkbox" id="chk-lines" checked> Lines (synthetic)</label>
+  </form>
+  <div class="kpis compact">
+    <div class="kpi"><b id="kpi-stationen">–</b><span>transformers with a bottleneck</span></div>
+    <div class="kpi"><b id="kpi-speicher">–</b><span>home batteries (10 kWh) needed to relieve them</span></div>
+    <div class="kpi"><b id="kpi-vorhanden">–</b><span>of which already there today (model)</span></div>
+    <div class="kpi"><b id="kpi-geliefert">–</b><span id="kpi-geliefert-text">kW a 5 kW battery really delivers per call (test calls, mocked)</span></div>
+  </div>
+  <p class="takeaway" id="kpi-verdict" aria-live="polite"></p>
+  <p class="note" id="kpi-label"></p>
+  <div class="maprow">
+    <div class="mapwrap"><div id="map" role="region" aria-label="Map of the Steyr area"></div>
+      <p id="demo-status" class="map-status">Loading data …</p></div>
+    <aside>
+      <h4>Legend</h4>
+      <ul class="legend" id="map-legend"></ul>
+      <p class="note">Click a transformer: below, the processes P4 and P5 run step by step.</p>
+    </aside>
+  </div>
+
+  <h4 id="flow-title">IES process</h4>
+  <div id="flow" class="flow"></div>
+  <p class="note">Bottleneck, power and transformer come from the simulation; batteries, test calls and responses are mocked
+     (anonymised manufacturer groups A–E). “State of health” is how much capacity a battery has left compared with when it was new.</p>
+</section>
+<section>
+  <h3>All transformers in the selected scenario</h3>
+  <p class="note"><label class="chk"><input type="checkbox" id="only-engpass" checked> only transformers with a bottleneck</label>
+     · <span id="table-count"></span> · click a column header to sort, click a row for the process</p>
+  <div class="tablewrap tall"><table id="station-table"></table></div>
+</section>
+<section>
+  <h3>One day at a transformer</h3>
+  <label>Example transformer <select id="sel-ts"></select></label>
+  <h4>Peak summer day: battery strategies compared</h4>
+  <div id="chart-summer" class="chartbox"></div>
+  <p class="note" id="cap-summer"></p>
+  <h4>Coldest winter day 2040: where the load comes from</h4>
+  <div id="chart-winter" class="chartbox"></div>
+  <p class="note" id="cap-winter"></p>
+</section>
+<section>
+  <h3>Test calls: how reliably do the batteries respond? (mocked)</h3>
+  <div id="chart-rel" class="chartbox"></div>
+  <div class="tablewrap"><table id="rel-table"></table></div>
+  <p class="note">6 test calls per battery (April–September 2026), <span id="rel-count">–</span> batteries. Mocked data to illustrate process P3:
+     test calls show how much power the grid operator can really rely on per manufacturer group.</p>
+</section>
+<section id="live">
+  <div id="region-dashboard" hidden></div>
+  <p class="note">Live simulation on our server: all 257 transformers, a whole year, with the charging and battery options from step 8.
+     Each run is repeated with 20 random draws (step 5); the band shows how much the result depends on chance.
+     Click a transformer on its map for its worst day in 15-minute steps.</p>
+</section>
+
+<h2 id="sources" class="part"><span>7</span> All assumptions and data sources at a glance</h2>
+<section>
+<h3>Why the simulation is built this way</h3>
+<p>The simulation answers one question from the grid operator's side: <b>at which transformer, in which hour,
+   would grid-serving batteries replace grid reinforcement, and how many would it take?</b>
+   Every choice follows from that question and from the rule that only open data may be used.</p>
+<div class="tablewrap">
+<table class="text">
+  <thead><tr><th class="l">Choice</th><th class="l">Why</th><th class="l">Limit</th></tr></thead>
+  <tbody>
+    <tr><td class="l"><b>All 257 transformers</b>, not one example grid</td>
+        <td class="l">Calls address a segment. The grid operator needs to know where batteries help and where they do not;
+            one example grid hides the spread between a weak rural and a strong urban transformer.</td>
+        <td class="l">Where map data has no transformer, one is placed synthetically.</td></tr>
+    <tr><td class="l"><b>Synthetic low-voltage grids</b> (step 2)</td>
+        <td class="l">The real grid is critical infrastructure and not public. Calibrated against published Austrian field grids.</td>
+        <td class="l">Results per transformer are plausible, not exact. The 30 kWp threshold is an assumption.</td></tr>
+    <tr><td class="l"><b>Every hour of a full year</b> (step 7)</td>
+        <td class="l">Bottlenecks are rare events. A typical day or a monthly mean would miss them, and the battery need depends on how long each event lasts.</td>
+        <td class="l">Hourly, not 15-minute values: short peaks are smoothed. The live simulation uses 15-minute steps for the single day.</td></tr>
+    <tr><td class="l"><b>Three real weather years</b> (step 6)</td>
+        <td class="l">Summer feed-in and winter demand both depend on the weather; the spread shows how robust a result is.</td>
+        <td class="l">One temperature per transformer.</td></tr>
+    <tr><td class="l"><b>Transformer first, voltage for the 24 hardest hours</b> (step 7)</td>
+        <td class="l">The transformer rating is the limit a call protects, so it is checked every hour. Voltage is the first limit in rural grids,
+            so it is checked where feed-in is highest. This keeps 257 transformers × 8,760 hours × all scenarios computable.</td>
+        <td class="l">Reactive power Q(U) checked as a variant in summer; winter voltage drop for 2030 and 2040; voltage outside these hours not checked; all phases equal.</td></tr>
+    <tr><td class="l"><b>Heat check of each transformer</b> (step 7)</td>
+        <td class="l">A transformer may carry more than its rating for some hours, especially in the cold. Only a thermally critical bottleneck is urgent.</td>
+        <td class="l">Typical values for oil distribution transformers; the station housing is assumed 5 K warmer than outside.</td></tr>
+    <tr><td class="l"><b>20 random draws and one-at-a-time sensitivity</b> (chapter 4)</td>
+        <td class="l">Shows which results depend on chance and which on a single assumption.</td>
+        <td class="l">Assumptions are varied one at a time, not all together.</td></tr>
+    <tr><td class="l"><b>Both directions</b>: summer feed-in and winter demand</td>
+        <td class="l">The proposal uses batteries both ways. Simulating both shows where they help (summer) and where they honestly do not (cold spell).</td>
+        <td class="l">Businesses only as a sensitivity; heat pumps never switched off.</td></tr>
+    <tr><td class="l"><b>Today's self-consumption as the baseline</b> (step 8)</td>
+        <td class="l">A subsidy condition is only fair if it barely costs the owner. The electricity bill shows that: about +4–5 € a year with a good forecast,
+            +23–25 € with a simple one, +85–90 € with a fixed limit.</td>
+        <td class="l">Perfect and simple forecast bracket reality; prices 25 ct (purchase) and 7 ct (feed-in) per kWh are assumptions.</td></tr>
+    <tr><td class="l"><b>Need counted in 10 kWh home batteries</b> (step 7)</td>
+        <td class="l">The number of batteries per segment is what subsidy and test calls are planned against. In summer the energy is the binding limit;
+            for short winter peaks in 2030 the power is, at about half of the transformers.</td>
+        <td class="l">Battery shares (step 4) are assumptions.</td></tr>
+    <tr><td class="l"><b>Scenarios</b> PV ×1.5 / ×2, heat pumps and EVs 2030 / 2040 (step 5)</td>
+        <td class="l">Today only 1–3 of 257 transformers have a feed-in bottleneck (partly because today's PV is part of our sizing).
+            The interface and the subsidy are meant for the build-out.</td>
+        <td class="l">Renovation until 2040 only as a sensitivity; heat demand calibrated to today's census values.</td></tr>
+    <tr><td class="l"><b>Mocked batteries and test calls</b></td>
+        <td class="l">There is no field data on how fast and reliably home batteries respond to a grid operator. The mock shows the loop the profile requires.</td>
+        <td class="l">Manufacturer groups A–E are invented; response times are illustrative.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+<section id="data">
+<h3>Data sources</h3>
+<div class="tablewrap"><table class="text">
+  <thead><tr><th class="l">What</th><th class="l">Source</th><th class="l">Used in</th></tr></thead>
+  <tbody>
+    <tr><td class="l">Transformer stations, roads</td><td class="l">OpenStreetMap contributors (ODbL)</td><td class="l">Step 1</td></tr>
+    <tr><td class="l">Substation capacities</td><td class="l">ebUtilities</td><td class="l">Step 1, map</td></tr>
+    <tr><td class="l">Buildings and addresses</td><td class="l">Austrian address register (BEV)</td><td class="l">Step 2</td></tr>
+    <tr><td class="l">Reference grids for calibration</td><td class="l">DG DemoNet final report 2015; TU Wien reference feeders 2018</td><td class="l">Step 2</td></tr>
+    <tr><td class="l">PV systems 2021–23</td><td class="l">BOKU University, Zenodo (CC BY 4.0)</td><td class="l">Step 3</td></tr>
+    <tr><td class="l">Aerial images 2025</td><td class="l">BEV (CC BY 4.0)</td><td class="l">Step 3, own model</td></tr>
+    <tr><td class="l">Solar output per hour</td><td class="l">EU JRC PVGIS 5.3</td><td class="l">Steps 3, 6</td></tr>
+    <tr><td class="l">Household load</td><td class="l">APCS standard load profile H0</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Building shapes</td><td class="l">Land Upper Austria, doris.at, LoD1 (CC BY 4.0)</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Heating demand</td><td class="l">TABULA building typology; Statistik Austria household energy use</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Heat-pump efficiency</td><td class="l">when2heat (Open Power System Data, CC BY 4.0)</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Heat-pump outlook for the scenarios</td><td class="l">Umweltbundesamt scenario “with additional measures” (via BMK); TU Wien “Wärmezukunft 2050”</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Temperature</td><td class="l">GeoSphere Austria INCA; Wachtberg climate station</td><td class="l">Step 6</td></tr>
+    <tr><td class="l">Base map</td><td class="l">basemap.at (CC BY 4.0)</td><td class="l">Map</td></tr>
+  </tbody>
+</table></div>
+<p class="note">Not modelled: the real grid (deliberately: it is critical infrastructure and not public), unequal loading of the three phases,
+   heat pumps switched off by the grid operator, the medium-voltage grid. Businesses and renovation until 2040 only as sensitivities. Each assumption is documented with source, page and verbatim quote
+   in the project repository.</p>
+</section>
+
+<footer>
+  Data: © OpenStreetMap contributors (ODbL) · © Austrian address register · BOKU University (CC BY 4.0) ·
+  Land OÖ, doris.at (CC BY 4.0) · GeoSphere Austria · EU JRC PVGIS · Open Power System Data (CC BY 4.0) · Statistik Austria ·
+  Basemap: basemap.at (CC BY 4.0). Model results, not measurements. Evidence with page and wording in the project repository.
+</footer>
+</main>
+</body>
+</html>

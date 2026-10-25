@@ -1,0 +1,103 @@
+{
+ "annahmen": {
+  "ohne_foerderzuschlag": true,
+  "zins": 0.04,
+  "lebensdauer_netz_a": 40,
+  "lebensdauer_box_a": 15,
+  "trafo_tausch_eur": {
+   "1": 20000,
+   "2": 35000
+  },
+  "neue_station_eur": 120000,
+  "box_eur": 600,
+  "foerderzuschlag_eur": 0,
+  "betrieb_box_eur_a": 20,
+  "entschaedigung_eur_kwh": 0.15000000000000002,
+  "wert_abregelung_eur_kwh": 0.08,
+  "hinweis": "Größenordnungen, keine Angebote; mit einem Netzbetreiber zu prüfen"
+ },
+ "faelle": [
+  {
+   "ordner": "output-need-g-2023-heute",
+   "pv_faktor": 1.5,
+   "richtung": "einspeisung",
+   "stationen": 19,
+   "speicher_noetig_median": 122,
+   "speicher_gleichstand_median": 18.4,
+   "guenstigstes_mittel": {
+    "abregelung": 12,
+    "verstaerkung": 7
+   },
+   "jahreskosten_eur_summe": {
+    "verstaerkung": 36124,
+    "speicher": 375098,
+    "abregelung": 39263
+   }
+  },
+  {
+   "ordner": "output-need-g-2023-heute",
+   "pv_faktor": 2.0,
+   "richtung": "einspeisung",
+   "stationen": 34,
+   "speicher_noetig_median": 173,
+   "speicher_gleichstand_median": 17.0,
+   "guenstigstes_mittel": {
+    "verstaerkung": 18,
+    "abregelung": 16
+   },
+   "jahreskosten_eur_summe": {
+    "verstaerkung": 87406,
+    "speicher": 1331970,
+    "abregelung": 203282
+   }
+  },
+  {
+   "ordner": "output-need-g-2012-2030",
+   "pv_faktor": 1.0,
+   "richtung": "bezug",
+   "stationen": 90,
+   "speicher_noetig_median": 36,
+   "speicher_gleichstand_median": 13.6,
+   "guenstigstes_mittel": {
+    "speicher": 38,
+    "verstaerkung": 52
+   },
+   "jahreskosten_eur_summe": {
+    "verstaerkung": 209672,
+    "speicher": 3555710
+   }
+  },
+  {
+   "ordner": "output-need-g-2017-2040",
+   "pv_faktor": 1.0,
+   "richtung": "bezug",
+   "stationen": 200,
+   "speicher_noetig_median": 260,
+   "speicher_gleichstand_median": 22.7,
+   "guenstigstes_mittel": {
+    "verstaerkung": 180,
+    "speicher": 20
+   },
+   "jahreskosten_eur_summe": {
+    "verstaerkung": 515340,
+    "speicher": 34666056
+   }
+  },
+  {
+   "ordner": "output-need-g-2012-2040",
+   "pv_faktor": 1.0,
+   "richtung": "bezug",
+   "stationen": 210,
+   "speicher_noetig_median": 1680,
+   "speicher_gleichstand_median": 23.7,
+   "guenstigstes_mittel": {
+    "verstaerkung": 201,
+    "speicher": 9
+   },
+   "jahreskosten_eur_summe": {
+    "verstaerkung": 616387,
+    "speicher": 98761197
+   }
+  }
+ ]
+}

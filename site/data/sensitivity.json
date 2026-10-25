@@ -1,0 +1,356 @@
+{
+ "fall": {
+  "ordner": "output-need-g-2017-2040",
+  "wetterjahr": 2017,
+  "szenario": "2040"
+ },
+ "richtung": "bezug",
+ "referenz": {
+  "stationen": 200,
+  "thermisch": 104,
+  "e_netto_mwh": 1056.89,
+  "speicher": 457065,
+  "speicher_ohne_nachladen": 323989,
+  "spannungsfall_ueber_grenze": 229,
+  "kabel_ueber_100pct": 109
+ },
+ "varianten": [
+  {
+   "gruppe": "bemessung",
+   "label": "Trafo-Bemessung mittel (3,8 kVA/Gebäude, 2,8 kVA/Haushalt)",
+   "schalter": "--kva-building 3.8 --kva-hh 2.8",
+   "kennzahlen": {
+    "stationen": 165,
+    "thermisch": 31,
+    "e_netto_mwh": 710.47,
+    "speicher": 315107,
+    "speicher_ohne_nachladen": 217978
+   },
+   "abweichung": {
+    "stationen": -35,
+    "thermisch": -73,
+    "e_netto_mwh": -346.4200000000001,
+    "speicher": -141958,
+    "speicher_ohne_nachladen": -106011
+   }
+  },
+  {
+   "gruppe": "bemessung",
+   "label": "Trafo-Bemessung hoch (4,6 / 3,6)",
+   "schalter": "--kva-building 4.6 --kva-hh 3.6",
+   "kennzahlen": {
+    "stationen": 99,
+    "thermisch": 25,
+    "e_netto_mwh": 671.62,
+    "speicher": 297204,
+    "speicher_ohne_nachladen": 205921
+   },
+   "abweichung": {
+    "stationen": -101,
+    "thermisch": -79,
+    "e_netto_mwh": -385.2700000000001,
+    "speicher": -159861,
+    "speicher_ohne_nachladen": -118068
+   }
+  },
+  {
+   "gruppe": "waermepumpe",
+   "label": "Wärmepumpen 50 % statt 70 %",
+   "schalter": "--wp-share 0.5",
+   "kennzahlen": {
+    "stationen": 183,
+    "thermisch": 55,
+    "e_netto_mwh": 229.75,
+    "speicher": 106823,
+    "speicher_ohne_nachladen": 70659
+   },
+   "abweichung": {
+    "stationen": -17,
+    "thermisch": -49,
+    "e_netto_mwh": -827.1400000000001,
+    "speicher": -350242,
+    "speicher_ohne_nachladen": -253330
+   }
+  },
+  {
+   "gruppe": "waermepumpe",
+   "label": "Wärmepumpen 85 %",
+   "schalter": "--wp-share 0.85",
+   "kennzahlen": {
+    "stationen": 208,
+    "thermisch": 142,
+    "e_netto_mwh": 2375.07,
+    "speicher": 1151522,
+    "speicher_ohne_nachladen": 727821
+   },
+   "abweichung": {
+    "stationen": 8,
+    "thermisch": 38,
+    "e_netto_mwh": 1318.18,
+    "speicher": 694457,
+    "speicher_ohne_nachladen": 403832
+   }
+  },
+  {
+   "gruppe": "eauto",
+   "label": "E-Autos 40 % statt 60 %",
+   "schalter": "--ev-share 0.4",
+   "kennzahlen": {
+    "stationen": 183,
+    "thermisch": 68,
+    "e_netto_mwh": 846.04,
+    "speicher": 346080,
+    "speicher_ohne_nachladen": 259368
+   },
+   "abweichung": {
+    "stationen": -17,
+    "thermisch": -36,
+    "e_netto_mwh": -210.85000000000014,
+    "speicher": -110985,
+    "speicher_ohne_nachladen": -64621
+   }
+  },
+  {
+   "gruppe": "eauto",
+   "label": "E-Autos 80 %",
+   "schalter": "--ev-share 0.8",
+   "kennzahlen": {
+    "stationen": 206,
+    "thermisch": 142,
+    "e_netto_mwh": 1289.06,
+    "speicher": 587474,
+    "speicher_ohne_nachladen": 395140
+   },
+   "abweichung": {
+    "stationen": 6,
+    "thermisch": 38,
+    "e_netto_mwh": 232.16999999999985,
+    "speicher": 130409,
+    "speicher_ohne_nachladen": 71151
+   }
+  },
+  {
+   "gruppe": "bivalenz",
+   "label": "Heizstab ab -3 °C statt -7 °C",
+   "schalter": "--bivalent -3",
+   "kennzahlen": {
+    "stationen": 206,
+    "thermisch": 133,
+    "e_netto_mwh": 1703.02,
+    "speicher": 745689,
+    "speicher_ohne_nachladen": 521932
+   },
+   "abweichung": {
+    "stationen": 6,
+    "thermisch": 29,
+    "e_netto_mwh": 646.1299999999999,
+    "speicher": 288624,
+    "speicher_ohne_nachladen": 197943
+   }
+  },
+  {
+   "gruppe": "bivalenz",
+   "label": "Heizstab erst ab -15 °C",
+   "schalter": "--bivalent -15",
+   "kennzahlen": {
+    "stationen": 199,
+    "thermisch": 98,
+    "e_netto_mwh": 932.85,
+    "speicher": 410895,
+    "speicher_ohne_nachladen": 285983
+   },
+   "abweichung": {
+    "stationen": -1,
+    "thermisch": -6,
+    "e_netto_mwh": -124.04000000000008,
+    "speicher": -46170,
+    "speicher_ohne_nachladen": -38006
+   }
+  },
+  {
+   "gruppe": "sanierung",
+   "label": "Wärmebedarf -20 % (Sanierung)",
+   "schalter": "--heat-factor 0.8",
+   "kennzahlen": {
+    "stationen": 190,
+    "thermisch": 68,
+    "e_netto_mwh": 319.04,
+    "speicher": 149404,
+    "speicher_ohne_nachladen": 97974
+   },
+   "abweichung": {
+    "stationen": -10,
+    "thermisch": -36,
+    "e_netto_mwh": -737.8500000000001,
+    "speicher": -307661,
+    "speicher_ohne_nachladen": -226015
+   }
+  },
+  {
+   "gruppe": "sanierung",
+   "label": "Wärmebedarf -35 %",
+   "schalter": "--heat-factor 0.65",
+   "kennzahlen": {
+    "stationen": 180,
+    "thermisch": 38,
+    "e_netto_mwh": 135.61,
+    "speicher": 52746,
+    "speicher_ohne_nachladen": 41834
+   },
+   "abweichung": {
+    "stationen": -20,
+    "thermisch": -66,
+    "e_netto_mwh": -921.2800000000001,
+    "speicher": -404319,
+    "speicher_ohne_nachladen": -282155
+   }
+  },
+  {
+   "gruppe": "mfh",
+   "label": "8 statt 5 Haushalte je Mehrparteienhaus",
+   "schalter": "--hh-mfh 8",
+   "kennzahlen": {
+    "stationen": 216,
+    "thermisch": 114,
+    "e_netto_mwh": 3251.04,
+    "speicher": 1825921,
+    "speicher_ohne_nachladen": 996246
+   },
+   "abweichung": {
+    "stationen": 16,
+    "thermisch": 10,
+    "e_netto_mwh": 2194.1499999999996,
+    "speicher": 1368856,
+    "speicher_ohne_nachladen": 672257
+   }
+  },
+  {
+   "gruppe": "gewerbe",
+   "label": "Gewerbe als Last",
+   "schalter": "--commercial last",
+   "kennzahlen": {
+    "stationen": 207,
+    "thermisch": 125,
+    "e_netto_mwh": 1755.05,
+    "speicher": 1403428,
+    "speicher_ohne_nachladen": 537883
+   },
+   "abweichung": {
+    "stationen": 7,
+    "thermisch": 21,
+    "e_netto_mwh": 698.1599999999999,
+    "speicher": 946363,
+    "speicher_ohne_nachladen": 213894
+   }
+  },
+  {
+   "gruppe": "gewerbe",
+   "label": "Gewerbe als Last, Trafo dafür größer",
+   "schalter": "--commercial last_bemessung",
+   "kennzahlen": {
+    "stationen": 132,
+    "thermisch": 48,
+    "e_netto_mwh": 1127.16,
+    "speicher": 776581,
+    "speicher_ohne_nachladen": 345510
+   },
+   "abweichung": {
+    "stationen": -68,
+    "thermisch": -56,
+    "e_netto_mwh": 70.26999999999998,
+    "speicher": 319516,
+    "speicher_ohne_nachladen": 21521
+   }
+  },
+  {
+   "gruppe": "zuordnung",
+   "label": "Zuordnung entlang der Straßen",
+   "schalter": "--assign-roads",
+   "kennzahlen": {
+    "stationen": 193,
+    "thermisch": 100,
+    "e_netto_mwh": 1662.73,
+    "speicher": 851292,
+    "speicher_ohne_nachladen": 509591
+   },
+   "abweichung": {
+    "stationen": -7,
+    "thermisch": -4,
+    "e_netto_mwh": 605.8399999999999,
+    "speicher": 394227,
+    "speicher_ohne_nachladen": 185602
+   }
+  }
+ ],
+ "seeds": {
+  "2017|2040": {
+   "n": 20,
+   "stationen": {
+    "p10": 198.9,
+    "median": 201.5,
+    "p90": 205.0
+   },
+   "thermisch": {
+    "p10": 104.7,
+    "median": 112.5,
+    "p90": 119.0
+   },
+   "e_netto_mwh": {
+    "p10": 1026.659,
+    "median": 1098.885,
+    "p90": 1169.3700000000001
+   },
+   "speicher": {
+    "p10": 452914.5,
+    "median": 498887.5,
+    "p90": 515226.0
+   }
+  },
+  "2017|2030": {
+   "n": 20,
+   "stationen": {
+    "p10": 49.8,
+    "median": 55.0,
+    "p90": 60.50000000000001
+   },
+   "thermisch": {
+    "p10": 1.0,
+    "median": 2.0,
+    "p90": 3.0
+   },
+   "e_netto_mwh": {
+    "p10": 10.821,
+    "median": 12.915,
+    "p90": 16.921000000000003
+   },
+   "speicher": {
+    "p10": 3608.9,
+    "median": 4327.5,
+    "p90": 5793.6
+   }
+  },
+  "2012|2040": {
+   "n": 20,
+   "stationen": {
+    "p10": 207.0,
+    "median": 210.5,
+    "p90": 213.1
+   },
+   "thermisch": {
+    "p10": 151.7,
+    "median": 157.0,
+    "p90": 162.1
+   },
+   "e_netto_mwh": {
+    "p10": 3482.937,
+    "median": 3609.95,
+    "p90": 3791.2720000000004
+   },
+   "speicher": {
+    "p10": 1303347.4,
+    "median": 1347825.5,
+    "p90": 1400532.2
+   }
+  }
+ }
+}

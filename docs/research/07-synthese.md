@@ -93,7 +93,7 @@ fehlende Stück: den Speicher in beide Richtungen, die unabhängige Verifikation
 | **P2 Testabruf** | regelmäßig, klein, randomisiert; Reaktionszeit, Genauigkeit und Erreichbarkeit je Gerät messen und je Typ/Firmware aggregieren; Test auch nach Firmware-Update | § 76 Abs. 2 „nachweislich“; 02 Lesson 3; 04 C |
 | **P3 Ereignis-Abruf laden/entladen** | Engpass erkannt → signierter Segmentbefehl (Modus, Sollwert, Start, Dauer, Randomisierung, Ablaufzeit) → Umsetzung ≤ 1 min → gestaffelte Rückkehr; möglichst mit Vorankündigung („Arming“) und SoC-Rückmeldung | 03 Empfehlung; 02 Lessons 4, 10; 01 § 5 |
 | **P4 Verifikation** | Stufe 1 lokal (Kundenschnittstelle, Plausibilisierung), Stufe 2 verbindlich (15-min-Backend, Folgetag); Soll-Ist gegen den Befehl statt statistischer Baseline | 03 Verifikation; 02 KA8 |
-| **P5 Abrechnung / Förderung** | Vergütung aktiver Abrufe; Nachweis der Testabruf-Teilnahme an die Förderstelle; Anomalie → Gerät oder Typ sperren, Meldung nach CRA | 01 § 3; 04 C; anforderungen.md |
+| **P5 Abrechnung / Förderung** | Vergütung aktiver Abrufe; Nachweis der Testabruf-Teilnahme an die Förderstelle; Anomalie → Gerät oder Typ sperren, Meldung nach CRA; Förderstufen 0–3 mit Auszahlung in Tranchen nach gemessener Netzdienlichkeit; Schadlosstellung des Kunden bei VNB-Eingriffen (Ist minus kontrafaktische Referenz, plus Vergütung) | 01 § 3; 04 C; anforderungen.md; [ems-konzept.md](../ems-konzept.md) §5, §6 |
 
 ### 4.3 Schnittstellen
 
@@ -106,7 +106,7 @@ fehlende Stück: den Speicher in beide Richtungen, die unabhängige Verifikation
 | I5 | Smart-Meter-Backend → VNB-Verifikation | verbindliche Erbringungsprüfung, Testabruf-Statistik | 15-min-Lastgang (Folgetag); kein spezieller Standard gefunden |
 | I6 | VNB ↔ Lieferant/Aggregator | Vorrang, Vortagesmeldung, Fahrplananpassung | Flexibilitätsplattform § 142 ElWG; Ampellogik (BDEW) |
 | I7 | PKI ↔ Modul | Zertifikate, Sperrliste, Rotation | Vorbilder SMGW-PKI (TR-03109-4), CSIP-AUS-PKI |
-| I8 | VNB → Förderstelle | Nachweis Schnittstelle und Testabruf-Teilnahme | kein Standard gefunden **[offen]** |
+| I8 | VNB → Förderstelle | Nachweis Schnittstelle und Testabruf-Teilnahme; Jahresnachweis der Netzdienlichkeit für die Förder-Tranchen, gestützt auf die eigene Messung (Modul `MTR`/`MEAS`, siehe [ems-konzept.md](../ems-konzept.md) §5) | kein Standard gefunden **[offen]** |
 | I9 | VNB/Modul → Kunde | Abrufprotokoll, Transparenz | App/Portal, kein Standard nötig |
 
 ### 4.4 Sicherheitsanforderungen (aus 04, Minimal-Sicherheitsprofil)
