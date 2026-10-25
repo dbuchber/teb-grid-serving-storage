@@ -289,6 +289,13 @@ select { font: inherit; font-size: 13px; color: var(--ink); background: var(--ra
   .hint { font-size: 12px; }
   .more, .source { margin-top: 8px; }
   .continue { padding: 6px 12px; }
+  .actors { margin-top: 12px; }
+  .actors li { padding: 4px 10px; font-size: 12px; }
+  .phases { margin-top: 10px; }
+  .phases article { padding: 12px; }
+  .phases h3 { font-size: 15px; margin-bottom: 4px; }
+  .phases p { font-size: 12.5px; margin-bottom: 6px; }
+  .ifaces { font-size: 12.5px !important; margin-top: 8px !important; }
 }
 /* Handy: Karte nicht von der Legende verdecken */
 @media (max-width: 600px) { .legend { left: 8px; right: 8px; bottom: 34px; font-size: 11px; } }
