@@ -67,13 +67,18 @@ def seed_of(i):
 
 
 def flows(p, params, i):
-    """Zwischenschritte eines Seeds: Fluss ohne E-Auto, E-Auto-Last, Endfluss je Station, ungeladene Energie."""
+    """Zwischenschritte eines Seeds: Fluss ohne E-Auto, E-Auto-Last, Endfluss je Station, ungeladene Energie.
+
+    ``storage_delta``/``storage_idx``: Wirkung der Heimspeicher je Speicherknoten, ``seed``: Seed des Laufs; beides
+    für Knotenflüsse (nodeflow.py).
+    """
     seed = seed_of(i)
     rng = np.random.default_rng(seed)
     heat, cars = profiles.assign(p, params.scenario, rng)
     wp_st, wp_sto = profiles.heat_pump(p, heat, seed)
     ev = profiles.ev_events(p, cars, rng)
-    base = control.storage_flow(p, params.pv_factor, params.storage, wp_st, wp_sto)
+    base, storage_delta, storage_idx = control.storage_flow(p, params.pv_factor, params.storage, wp_st, wp_sto,
+                                                            return_delta=True)
     s = p.n_stations
     if params.charging == 'winap':
         start = control.start_winap(ev, p.year)
@@ -92,7 +97,8 @@ def flows(p, params, i):
             unmet = unmet + unmet_v2g
     flow = np.asarray(base, dtype=float) + ev_load - v2g
     return {'heat': heat, 'cars': cars, 'wp_station': wp_st, 'ev': ev, 'start': start, 'base': base,
-            'ev_load': ev_load, 'v2g': v2g, 'flow': flow, 'unmet': unmet}
+            'ev_load': ev_load, 'v2g': v2g, 'flow': flow, 'unmet': unmet,
+            'storage_delta': storage_delta, 'storage_idx': storage_idx, 'seed': seed}
 
 
 def run_seed(p, params, i):
