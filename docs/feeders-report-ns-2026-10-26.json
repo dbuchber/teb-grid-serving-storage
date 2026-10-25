@@ -1,20 +1,21 @@
 {
- "n_stations": 771,
+ "n_stations": 696,
  "marked": {
-  "stations_long": 10,
-  "stations_sizing": 0,
-  "stations_any": 10,
-  "stations_any_share": 0.013,
-  "feeders_long": 13,
-  "feeders_sizing": 0,
-  "feeders_any": 13,
+  "stations_long": 15,
+  "stations_sizing": 5,
+  "stations_any": 20,
+  "stations_any_share": 0.0287,
+  "feeders_long": 21,
+  "feeders_sizing": 8,
+  "feeders_any": 29,
   "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang) oder SizedGrid.marked (Bemessung scheitert)"
  },
  "cable_share": {
-  "by_cable_length": 0.7391,
-  "by_route_length": 0.7494,
-  "by_cable_length_incl_service": 0.7549,
-  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben einmal",
+  "by_cable_length": 0.7109,
+  "by_route_length": 0.7244,
+  "by_cable_length_incl_service": 0.7325,
+  "acceptance": "by_route_length",
+  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben und Parallelsysteme einmal (Abnahmegröße: by_route_length)",
   "target": 0.79,
   "band": [
    0.74,
@@ -22,18 +23,18 @@
   ]
  },
  "trunk_km_per_station": {
-  "cable_length": 1.104,
-  "route_length": 0.979,
+  "cable_length": 1.496,
+  "route_length": 1.188,
   "target": 2.7
  },
  "total_km": {
-  "trunk_cable": 851.05,
-  "trunk_route": 754.81,
-  "service": 305.82
+  "trunk_cable": 1041.55,
+  "trunk_route": 827.08,
+  "service": 303.07
  },
  "feeders_per_station": {
-  "n": 771,
-  "mean": 2.95,
+  "n": 696,
+  "mean": 2.98,
   "median": 3.0,
   "p90": 5.0,
   "target": [
@@ -41,49 +42,64 @@
    3.8
   ]
  },
+ "per_building": {
+  "buildings_per_station": {
+   "n": 696,
+   "mean": 25.95,
+   "median": 9.0,
+   "p90": 72.5
+  },
+  "buildings": 18062,
+  "route_m_per_building": 45.8,
+  "target": {
+   "buildings_per_station": 58,
+   "route_m_per_building": 46
+  },
+  "definition": "Gebäude = Wohngebäude (hh > 0); Trasse ohne Hausanschlüsse; nur zur Orientierung"
+ },
  "areas": {
   "stadt": {
-   "stations": 69,
-   "feeders": 250,
+   "stations": 51,
+   "feeders": 207,
    "feeder_reach_m": {
-    "n": 250,
-    "mean": 207.5,
-    "median": 218.05,
-    "p90": 403.45
+    "n": 207,
+    "mean": 278.02,
+    "median": 296.6,
+    "p90": 492.42
    },
-   "trunk_km": 67.09
+   "trunk_km": 77.92
   },
   "ort": {
-   "stations": 406,
-   "feeders": 1340,
+   "stations": 309,
+   "feeders": 1163,
    "feeder_reach_m": {
-    "n": 1340,
-    "mean": 271.63,
-    "median": 254.5,
-    "p90": 557.41
+    "n": 1163,
+    "mean": 378.18,
+    "median": 393.5,
+    "p90": 684.06
    },
-   "trunk_km": 542.94
+   "trunk_km": 687.7
   },
   "streu": {
-   "stations": 296,
-   "feeders": 686,
+   "stations": 336,
+   "feeders": 707,
    "feeder_reach_m": {
-    "n": 686,
-    "mean": 279.11,
-    "median": 181.5,
-    "p90": 697.2
+    "n": 707,
+    "mean": 285.86,
+    "median": 113.1,
+    "p90": 805.44
    },
-   "trunk_km": 241.01
+   "trunk_km": 275.93
   }
  },
  "km_per_type": {
-  "Al 4x25 (Hausanschluss)": 61.6,
-  "Al 4x70": 183.43,
-  "Al 4x95": 38.57,
-  "NAYY 4x150": 85.87,
-  "NAYY 4x240": 42.22,
-  "NAYY 4x35 (Hausanschluss)": 244.23,
-  "NAYY 4x50": 500.96
+  "Al 4x25 (Hausanschluss)": 58.63,
+  "Al 4x70": 196.31,
+  "Al 4x95": 104.76,
+  "NAYY 4x150": 118.24,
+  "NAYY 4x240": 129.34,
+  "NAYY 4x35 (Hausanschluss)": 244.44,
+  "NAYY 4x50": 492.91
  },
  "thresholds": {
   "stadt": {
@@ -104,52 +120,56 @@
  },
  "extra_stations": {
   "stations_old": 257,
-  "stations_added": 525,
+  "stations_added": 442,
   "stations_dropped": {
-   "old": 11,
+   "old": 3,
    "new": 0
   },
-  "stations_new_kept": 525,
-  "stations_total": 771,
+  "stations_new_kept": 442,
+  "stations_total": 696,
   "marked_share": {
    "source": 0.8366,
-   "pass1": 0.1639,
-   "pass2": 0.013
+   "pass1": 0.2338,
+   "pass2": 0.0287
   },
   "marked_limit": 0.1,
   "passes": [
    {
     "pass": 1,
-    "planned": 411,
-    "dropped": 9,
-    "stations": 659,
+    "planned": 302,
+    "dropped": 3,
+    "stations": 556,
     "assignment": {
-     "road": 17988,
-     "air": 810,
-     "air_far": 0
+     "road": 4743,
+     "air": 343,
+     "air_far": 0,
+     "movable": 5086
     },
-    "marked_share": 0.1639
+    "marked_share": 0.2338
    },
    {
     "pass": 2,
-    "planned": 114,
-    "dropped": 2,
-    "stations": 771,
+    "planned": 140,
+    "dropped": 0,
+    "stations": 696,
     "assignment": {
-     "road": 17988,
-     "air": 810,
-     "air_far": 0
+     "road": 704,
+     "air": 27,
+     "air_far": 0,
+     "movable": 731
     },
-    "marked_share": 0.013
+    "marked_share": 0.0287
    }
   ],
   "buildings_without_road": {
-   "air_le_600m": 810,
-   "air_gt_600m": 0
+   "air_le_600m": 370,
+   "air_gt_600m": 0,
+   "definition": "bewegte Knoten ohne Straßenverbindung, Summe der Durchgänge"
   },
-  "nodes_moved": 9823,
+  "nodes_moved": 5218,
   "rule": {
-   "max_buildings": 30,
+   "max_cluster": 105,
+   "moves": "nur Knoten markierter Abgänge",
    "radius": "max_feeder_m / 1,2",
    "snap_m": 50.0,
    "air_max_m": 600.0,

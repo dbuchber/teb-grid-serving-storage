@@ -14,7 +14,8 @@
   "by_cable_length": 0.6789,
   "by_route_length": 0.6873,
   "by_cable_length_incl_service": 0.6952,
-  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben einmal",
+  "acceptance": "by_route_length",
+  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben und Parallelsysteme einmal (Abnahmegröße: by_route_length)",
   "target": 0.79,
   "band": [
    0.74,
@@ -40,6 +41,21 @@
    3.4,
    3.8
   ]
+ },
+ "per_building": {
+  "buildings_per_station": {
+   "n": 257,
+   "mean": 70.28,
+   "median": 38.0,
+   "p90": 179.8
+  },
+  "buildings": 18062,
+  "route_m_per_building": 57.2,
+  "target": {
+   "buildings_per_station": 58,
+   "route_m_per_building": 46
+  },
+  "definition": "Gebäude = Wohngebäude (hh > 0); Trasse ohne Hausanschlüsse; nur zur Orientierung"
  },
  "areas": {
   "stadt": {
