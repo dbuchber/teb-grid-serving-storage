@@ -21,6 +21,7 @@ unter der H0-Spitze (``sizing.design_flows``, ``design_loads``).
 import hashlib
 from dataclasses import asdict
 import json
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,6 +39,9 @@ from gridsim.feeders.topology import TAIL_MIN_HOMES, StationGrid, build_station_
 DESIGN_YEAR = 2012
 DESIGN_SCENARIO = 'heute'
 ROADS_FILE = 'osm_roads.json'
+# Beschreibt die aktuelle Bemessungsregel (Stand Fix-Runde 4); bei Regeländerungen mit ``run.MODEL_VERSION`` anpassen.
+RULE_TAG = ('binom-p90 ganze Geraete, WP als k groesste Leistungen, Haushalt >= H0-Spitze, EV k*p_ev(k), '
+            'Mindestquerschnitt stadt/ort, reine Spannungsfaelle getrennt (fix4)')
 MEMBER_INPUTS = ('osm_power.json', 'powerstations.json', 'pv_steyr_bbox.geojson', 'gebaeude_bbox.csv')
 TO_WGS84 = Transformer.from_crs(31287, 4326, always_xy=True)
 CHUNK = 2000            # Knoten je Wärmepumpenblock (8760 × CHUNK float32)
@@ -127,7 +131,8 @@ def design_loads(p):
     ``wp_kw``: elektrische Leistung einer Wärmepumpe am Knoten in der kältesten Stunde seiner Zelle (Wärme wie
     ``profiles.assign``, Versatz 0), 0 für Knoten ohne mögliche WP (Hallen, Fernwärme); ``kwp_peak``: PV-Spitze;
     ``rule``: Anteile wie ``profiles.assign`` (``p_wp`` je berechtigtem Gebäude, ``ev_share`` je Haushalt) und
-    H0-Spitze je Haushalt = max(H0 in der kältesten Stunde des Auslegungsjahrs, Jahresspitze des H0-Profils).
+    H0-Spitze je Haushalt = Jahresspitze des H0-Profils (die Winter-Abendspitze, sie liegt über dem Wert der
+    kältesten Stunde).
     """
     from gridsim import profiles
     from gridsim.run import BASE_SEED
@@ -156,9 +161,7 @@ def design_loads(p):
             wp_kw[part] = el[cold]
     kwp = np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1)
     h0 = np.asarray(p.h0, dtype=float) * legacy.load('steyr_sim_variant_a').KWH_PER_HH   # wie nodeflow
-    cold = int(np.argmin(temp.mean(axis=1)))
-    rule = DesignRule(wp_share=float(p_wp), ev_share=float(share['ev_share']),
-                      h0_peak_kw=float(max(h0[cold], h0.max())))
+    rule = DesignRule(wp_share=float(p_wp), ev_share=float(share['ev_share']), h0_peak_kw=float(h0.max()))
     return {'wp_kw': wp_kw, 'kwp_peak': kwp * float(np.max(p.pv_bins)), 'rule': rule}
 
 
@@ -202,11 +205,28 @@ def _load_station(path):
     return grid, sized
 
 
+def _check_model_version(d):
+    """Warnt, wenn die Netze ohne oder mit einer anderen ``MODEL_VERSION`` als der laufenden gebaut wurden
+    (Bemessungsregel möglicherweise veraltet; Cache-Schlüssel bleiben davon unberührt)."""
+    from gridsim.run import MODEL_VERSION
+    mf = d / 'manifest.json'
+    built = json.loads(mf.read_text()).get('model_version') if mf.exists() else None
+    if built is None:
+        warnings.warn(f'{d}: Stationsnetze ohne model_version im Manifest gebaut (laufend {MODEL_VERSION}); '
+                      'Bemessungsregel möglicherweise veraltet, prepare-feeders neu ausführen', RuntimeWarning,
+                      stacklevel=3)
+    elif built != MODEL_VERSION:
+        warnings.warn(f'{d}: Stationsnetze mit model_version {built} gebaut, laufend {MODEL_VERSION}; '
+                      'Bemessungsregel möglicherweise veraltet, prepare-feeders neu ausführen', RuntimeWarning,
+                      stacklevel=3)
+
+
 def load_feeders(prepared_root):
     """Alle Stationsnetze aus ``prepared_root/feeders/``; None, wenn das Verzeichnis fehlt."""
     d = Path(prepared_root) / 'feeders'
     if not (d / 'index.json').exists():
         return None
+    _check_model_version(d)
     index = json.loads((d / 'index.json').read_text())
     return {int(s): _load_station(d / f'{int(s)}.npz') for s in index}
 
@@ -436,8 +456,10 @@ def prepare_feeders(input_dir: Path, prepared_root: Path) -> Path:
     (out / 'lines.geojson').write_text(json.dumps(_geojson(grids), ensure_ascii=False))
     (out / 'report.json').write_text(json.dumps(_report(summaries, grids), ensure_ascii=False, indent=1))
     files = [f for f in (*MEMBER_INPUTS, ROADS_FILE) if (inp / f).exists()]
+    from gridsim.run import MODEL_VERSION
     manifest = {'created': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                'design': {'year': DESIGN_YEAR, 'scenario': DESIGN_SCENARIO, 'rule': 'fix1-binom-p90-h0peak',
+                'model_version': MODEL_VERSION,
+                'design': {'year': DESIGN_YEAR, 'scenario': DESIGN_SCENARIO, 'rule': RULE_TAG,
                            **asdict(ctx['loads']['rule'])},
                 'legacy_frozen_at': legacy.FROZEN_AT,
                 'legacy_sha256sums': hashlib.sha256((legacy.DIR / 'SHA256SUMS').read_bytes()).hexdigest(),

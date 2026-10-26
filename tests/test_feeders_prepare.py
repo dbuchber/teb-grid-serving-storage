@@ -55,6 +55,34 @@ def test_prepare_feeders_writes_all_stations(setup):
     assert 0.0 <= report['cable_share']['by_cable_length'] <= 1.0
 
 
+def test_manifest_records_model_version_and_current_rule(setup):
+    from gridsim import run
+    inp, prepared = setup
+    out = prepare_feeders(inp, prepared)
+    m = json.loads((out / 'manifest.json').read_text())
+    assert m['model_version'] == run.MODEL_VERSION
+    assert m['design']['rule'] != 'fix1-binom-p90-h0peak'
+    assert all(w in m['design']['rule'] for w in ('groesste', 'Mindestquerschnitt', 'Spannungsfaelle'))
+
+
+def test_load_feeders_warns_on_missing_or_other_model_version(setup):
+    import warnings
+    inp, prepared = setup
+    out = prepare_feeders(inp, prepared)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        load_feeders(prepared)                                  # aktueller Stand: keine Warnung
+    mf = json.loads((out / 'manifest.json').read_text())
+    mf['model_version'] = 'alt'
+    (out / 'manifest.json').write_text(json.dumps(mf))
+    with pytest.warns(RuntimeWarning, match='alt'):
+        assert load_feeders(prepared)
+    del mf['model_version']
+    (out / 'manifest.json').write_text(json.dumps(mf))
+    with pytest.warns(RuntimeWarning, match='ohne model_version'):
+        assert load_feeders(prepared)
+
+
 def test_station_file_roundtrip_exact(setup, tmp_path):
     """CSR, Geometrie und alle Felder kommen bitgleich aus der npz-Datei zurück."""
     from gridsim.feeders.prepare import _load_station, _save_station

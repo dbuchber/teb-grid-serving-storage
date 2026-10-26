@@ -94,7 +94,7 @@ Wirkung auf die Trafo-Kennzahlen heute (`prepared-ns-fix2`, ungesteuert, 20 Seed
 | 2023 | 0 (0–1) | **1,5** (0–4) | 0,00 → 0,03 | 0 → 1 |
 
 Die alten Werte sind ohne Cache mit den legacy-Anteilen gerechnet (`out/heute-old-shares-fix2.json` auf hetzner).
-Das sind immer noch wenige Trafos (2 % der 508 Stationen im Kältejahr). Mit 11 überlasteten Trafos in 2012 liegt
+Das sind (Stand Fix-Runde 2, 508 Stationen; Fix-Runde 4: 11 von 432) immer noch wenige Trafos (2 % der Stationen im Kältejahr). Mit 11 überlasteten Trafos in 2012 liegt
 das Modell aber deutlich über dem Bild „heute praktisch kein Trafo überlastet“.
 
 ## Mindestquerschnitt (Fix-Runde 2)
@@ -112,9 +112,10 @@ Ersetzt die Auslegungslast aus Spec 4.3 / Entscheidung 5; die Abnahmegrenze blei
 Haushalten und m WP-berechtigten Gebäuden dahinter:
 
 - **Haushalte:** n · max(P_HH · g(n), H0-Spitze). Die H0-Spitze kommt aus gridsims eigenem H0-Profil
-  (`p.h0 · KWH_PER_HH`), als größerer Wert aus „H0 in der kältesten Stunde 2012“ und „Jahresspitze des H0-Profils“
-  (die Abendspitze im Winter, die die Bewertung trifft). Das ergibt 0,79 kW je Haushalt; der Wert ist nicht im
-  Code festgeschrieben.
+  (`p.h0 · KWH_PER_HH`), als Jahresspitze des H0-Profils (die Abendspitze im Winter, die die Bewertung trifft). Das ergibt
+  0,79 kW je Haushalt; der Wert ist nicht im Code festgeschrieben. (Bis Fix-Runde 4 stand im Code
+  `max(H0 in der kältesten Stunde, Jahresspitze)`; das war immer die Jahresspitze, der Code ist ohne Änderung des
+  Ergebnisses vereinfacht.)
 - **Wärmepumpen:** k = P90 Binomial(m, p_wp) ganze Geräte (`scipy.stats.binom.ppf(0.9, m, p_wp)`). p_wp ist wie in
   `profiles.assign` der Anteil „heute“ (seit Fix-Runde 2: 23 %) geteilt durch den Anteil der Wohngebäude ohne Fernwärme, gezogen je
   berechtigtem Gebäude. Gerechnet wird seit Fix-Runde 3 die Summe der k größten vollen elektrischen Leistungen der
@@ -435,6 +436,22 @@ ein, Schalter „Control limits“ und „Grid storage“ umgestellt.
 
 ## Abweichungen und Entscheidungen
 
+Fix-Runde 5 (Review-Nacharbeit, 26.10.2026): nur Bericht, Auswertung und Metadaten, keine Änderung an Bemessung oder
+Simulation, `MODEL_VERSION` unverändert (.5).
+
+- **Trafo-Kennzahlen „heute“ nicht mehr bitgleich zu `origin/feat/gridsim`:** Die Vorgabe „Trafo-Kennzahlen bitgleich“
+  gilt für alle Szenarien außer „heute“. „heute“ nutzt seit Fix-Runde 2 die realen Anteile (WP 0,23, E-Autos 0,076
+  statt 0,15 / 0,08); legacy bleibt unverändert (SHA256SUMS). 2030, 2040 und 2040m sind weiter bitgleich.
+- **`gridsim validate`:** „heute“ wird nicht mehr gegen die Session-18-Werte (Alt-Anteile) geprüft, sondern nur
+  zur Information ausgewiesen (`validate.HEUTE_LEGACY`). 2030 und 2040 werden weiter mit ± 30 % geprüft.
+- **Manifest der Stationsnetze** (`feeders/manifest.json`) trägt `model_version` und eine zur aktuellen Regel passende
+  Bezeichnung; `load_feeders` warnt bei fehlender oder abweichender Version. Der Cache-Schlüssel ist unverändert.
+  `prepared-ns-fix4` auf hetzner wurde nicht neu gebaut: Sein Manifest trägt noch die alte Bezeichnung
+  `fix1-binom-p90-h0peak` und keine Version (die Netze selbst sind der angenommene Stand). Vor dem Einsatz (Task 12)
+  neu bauen.
+- **Abnahmeurteil** verlangt zusätzlich 20 Seeds je Wetterjahr und alle drei Jahre (`report.MIN_SEEDS`). Der
+  Lauf auf `cache-fix4` erfüllt das (20 Seeds in jedem Jahr).
+
 Fix-Runde 4 (Owner, 25./26.10.2026):
 
 - **Reine Spannungsfälle zählen nicht zur 10-%-Grenze:** Abgänge, die thermisch reichen, aber den Spannungsfall
@@ -501,14 +518,19 @@ sind mit dem Fix gerechnet.
 
 - **Synthetisches Netz:** Lage, Länge und Querschnitt der NS-Leitungen sind aus Straßen, Gebäuden und einer
   Planungsregel abgeleitet, nicht aus Netzdaten des Betreibers. Einzelne Stationen können stark abweichen; belastbar
-  sind nur Größenordnung und Richtung über die Region. Die Abnahmegrenze ist verfehlt: Das synthetische Netz ist
-  heute schon schwächer als ein real betriebenes, die Leitungszahlen für 2030/2040 sind deshalb zu hoch.
+  sind nur Größenordnung und Richtung über die Region. **Die Abnahmegrenze „heute“ ist bestanden** (0 Stationen über
+  100 %, Maximum 88,9 %, siehe „Abnahmegrenze“), aber nur mit der Owner-Entscheidung, reine Spannungsfälle nicht zur
+  10-%-Grenze zu zählen (siehe unten). Mit Mindestquerschnitt und P90-Bemessung ist das Netz eher stärker als ein
+  reales; Leitungsengpässe der Zukunftsszenarien werden daher eher unterschätzt (nicht, wie im ersten Lauf, überschätzt).
 - **Kein Spannungsurteil:** Bewertet wird nur thermisch (Strom gegen Grenzstrom). Spannungsfall und -anhebung
-  sind in keiner Kennzahl; der pandapower-Vergleich zeigt in 2040 Spannungen bis 0,69 pu, die im realen Netz
-  längst zu Maßnahmen geführt hätten. Wo die Spannung zuerst begrenzt (laut Literatur häufig in ländlichen
+  sind in keiner Kennzahl. Der pandapower-Vergleich (Fix-Runde 4, heute und 2040r) zeigt Spannungen von
+  0,84 bis 1,00 pu; der tiefste Wert (0,84 pu, Station 186) liegt in einer Streulage in 2040r. Solche Stellen
+  zeigen die reinen Spannungsfälle (siehe unten). Wo die Spannung zuerst begrenzt (laut Literatur häufig in ländlichen
   Netzen), unterschätzt die thermische Sicht den Bedarf.
-- **Radiale Summation:** ohne Verluste und bei 400 V; gegenüber dem Lastfluss 4 % (heute) bis 12 % (2040) zu
-  niedrig, bei tiefen Spannungen mehr.
+- **Radiale Summation:** ohne Verluste und bei 400 V. Gegenüber dem pandapower-Lastfluss liegt sie im Median 2,5 %
+  (heute) bzw. 3,9 % (2040r) darunter (P95 +4,1 % bzw. +8,9 % relativ; größte Abweichung 13,5 Pp in 2040r), bei
+  tiefen Spannungen mehr. In 2040r sind bei 23 von 234 Überlast-Entscheidungen beide Rechnungen uneinig; heute bei
+  keiner.
 - **Trafo-Bemessung:** Trafos der Zusatzstationen und der bisherigen Stationen kommen aus `trafo_kva`
   (2–3 kVA je Wohnung, auf Normgrößen gerundet), nicht aus Betreiberdaten. Die Trafo-Kennzahlen hängen direkt
   daran; ein Trafo eine Stufe größer verschiebt „Trafo zuerst“ zu „Leitung zuerst“.
@@ -527,7 +549,7 @@ sind mit dem Fix gerechnet.
 - **Trafo-Überlast „heute“ trotz realer Last:** Mit den Anteilen aus dem Ist-Abgleich sind im Kältejahr 2012
   „heute“ im Median 11 von 432 Trafos überlastet (Fix-Runde 4; 2017: 3,5, 2023: 2; dritter Lauf: 11 von 508). Die realen Trafos tragen die
   heutige Last; das Modell überschätzt also entweder die Last am Trafo oder unterschätzt seine Belastbarkeit.
-  Diagnose aus den Seeds 2012 des dritten Laufs: Die am häufigsten überlasteten Trafos haben 125 kVA (einzelne 160/250 kVA) bei
+  Diagnose aus den Seeds 2012 des dritten Laufs (Stand Fix-Runde 2, historisch, gilt in der Tendenz weiter): Die am häufigsten überlasteten Trafos haben 125 kVA (einzelne 160/250 kVA) bei
   2,0–2,2 kVA je Haushalt, am unteren Rand der Regel `trafo_kva` (2–3 kVA je Wohnung, Median aller Stationen
   3,0). Die meisten sind synthetische Stationen; die Überlast dauert nur 0–1 Stunde im Jahr. Mögliche Ursachen:
   - **Trafo-Leistungen nicht aus Daten:** Bemessungsleistungen kommen aus der Regel, nicht vom Netzbetreiber
@@ -546,7 +568,7 @@ sind mit dem Fix gerechnet.
   (Bezirkswerte nicht veröffentlicht); der Wärmepumpenanteil stammt aus dem Winter 2023/24.
 - **P90-Bemessung überdimensioniert eher:** Ganze Geräte als P90 der Binomialverteilung je Abschnitt bemessen
   jeden Abschnitt für ein Zehntel-Ereignis, und zwar alle Abschnitte zugleich. Ein Abschnitt mit einem
-  Haushalt bekommt schon eine volle Wärmepumpe (P(keine WP) = 85 % < 90 %). Über die Region entsteht so ein
+  Haushalt bekommt schon eine volle Wärmepumpe (p_wp = 0,23 / (1 − 12 % Fernwärme) ≈ 0,26, also P(keine WP) ≈ 74 % < 90 %). Über die Region entsteht so ein
   stärkeres Netz als der Erwartungswert verlangt: mehr 4x150/4x240, mehr scheiternde Bemessung, mehr markierte
   Abgänge. Leitungsengpässe in Zukunftsszenarien werden damit eher unterschätzt.
 - **Zufall und Seeds:** Wärmepumpen und E-Autos sind je Seed zufällig verteilt; alle Einstellungen haben
@@ -555,6 +577,8 @@ sind mit dem Fix gerechnet.
   Kostensätze für Leitungen sind Platzhalter.
 
 ## Vierter Lauf, verworfen (Fix-Runde 3, `MODEL_VERSION` 2026-10-26.4)
+
+**Historisch, verworfen:** Alle Zahlen und Aussagen dieses Abschnitts (einschließlich seiner Unterabschnitte) gelten nur für diesen Lauf. Das angenommene Ergebnis ist Fix-Runde 4 (oben).
 
 Kernzahlen: 525 Stationen, 61 Stationen (11,6 %) mit markiertem Abgang, fast alle nur wegen des Spannungsfalls (57 Stationen, ort/streu). Halt vor der Abnahmegrenze, keine Abnahmezahlen. Daraufhin hat der Owner reine Spannungsfälle aus der 10-%-Grenze genommen (Fix-Runde 4).
 
@@ -611,6 +635,8 @@ markiertem Abgang sank von 68,9 % (Ausgangsnetz) über 23,9 % (Durchgang 1) auf 
 Durchgänge sind das Maximum der Regel.
 
 ## Dritter Lauf, verworfen (Fix-Runde 2, `MODEL_VERSION` 2026-10-26.3)
+
+**Historisch, verworfen:** Alle Zahlen und Aussagen dieses Abschnitts (einschließlich seiner Unterabschnitte) gelten nur für diesen Lauf. Das angenommene Ergebnis ist Fix-Runde 4 (oben).
 
 Kernzahlen: 508 Stationen, Abnahmegrenze 6 Stationen über 100 % und keine über 120 % (nicht bestanden, nur Wetterjahr 2012), markierte Abgänge 9,8 %, Kabelanteil 75,0 %, NAYY 4x150 47 % des Strangs. Regel wie heute, aber Wärmepumpen als k × mittlere Leistung. Ist-Abgleich und Mindestquerschnitt wie heute.
 
@@ -723,6 +749,8 @@ bestandener Grenze (Vorgabe). Die Zahlen dazu stehen beim ersten Lauf und gelten
 Netzspeicher-Bemessung ist unverändert.
 
 ## Zweiter Lauf, verworfen (Fix-Runde 1, `MODEL_VERSION` 2026-10-26.2)
+
+**Historisch, verworfen:** Alle Zahlen und Aussagen dieses Abschnitts (einschließlich seiner Unterabschnitte) gelten nur für diesen Lauf. Das angenommene Ergebnis ist Fix-Runde 4 (oben).
 
 Kernzahlen: 487 Stationen, Abnahmegrenze 29 Stationen über 100 % und 5 über 120 % (nicht bestanden), markierte Abgänge 10,5 % (über der Grenze), Kabelanteil 74,7 %, NAYY 4x50 29 % des Strangs. Bemessungsregel wie heute (H0-Spitze, ganze Geräte P90), aber mit den legacy-Anteilen heute (15 % WP, 0,08 E-Autos) und ohne Mindestquerschnitt.
 
@@ -850,6 +878,8 @@ Netzspeicher-Bemessung: unverändert (Ruling 8). Neu bewertet wird sie erst mit 
 des ersten Laufs (sehr große Speicher im Winter, kleine Wirkung) bleibt die einzige Grundlage.
 
 ## Erster Lauf, verworfen (Bemessung nach Spec 4.3, `MODEL_VERSION` 2026-10-26.1)
+
+**Historisch, verworfen:** Alle Zahlen und Aussagen dieses Abschnitts (einschließlich seiner Unterabschnitte) gelten nur für diesen Lauf. Das angenommene Ergebnis ist Fix-Runde 4 (oben).
 
 Kernzahlen: 465 Stationen, Abnahmegrenze 105 Stationen über 100 % und 63 über 120 % (nicht bestanden), markierte Abgänge 6,2 %, NAYY 4x50 46 % des Strangs. Die Regel n · 2,0 kW · g(n) plus Erwartungswerte unterschätzte die Last am Winterabend um mehr als die Hälfte (Median 56 kW Auslegung gegen 121 kW Bewertung). Alle folgenden Zahlen gelten für dieses verworfene Netz.
 

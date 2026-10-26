@@ -23,21 +23,21 @@ def seeds(matrix, first_load=None, first_feed=None):
     return out
 
 
-def ten(values):
-    """10 Seeds, alle mit denselben Stationswerten."""
-    return seeds([values] * 10)
+def full(values, n=report.MIN_SEEDS):
+    """``n`` Seeds (Vorgabe: die für die Abnahme nötigen 20), alle mit denselben Stationswerten."""
+    return seeds([values] * n)
 
 
 def test_acceptance_passes_with_five_over_100():
-    ok = ten([101, 102, 103, 104, 105] + [50] * 252)
+    ok = full([101, 102, 103, 104, 105] + [50] * 252)
     acc = report.acceptance({2012: ok, 2017: ok, 2023: ok})
     assert acc['passed'] and acc['combined']['over_100'] == 5 and acc['combined']['over_120'] == 0
 
 
 def test_acceptance_fails_on_sixth_station_or_one_over_120():
-    six = ten([101] * 6 + [50] * 251)
+    six = full([101] * 6 + [50] * 251)
     assert not report.acceptance({2012: six, 2017: six, 2023: six})['passed']
-    hard = ten([121] + [50] * 256)
+    hard = full([121] + [50] * 256)
     acc = report.acceptance({2012: hard, 2017: hard, 2023: hard})
     assert not acc['passed'] and acc['combined']['over_120'] == 1
 
@@ -47,27 +47,44 @@ def test_acceptance_takes_p90_over_seeds_and_max_over_years():
     m = [[50, 50]] * 9 + [[300, 50]]
     p90 = report.station_p90(seeds(m))
     assert p90[0] == pytest.approx(np.percentile([50] * 9 + [300], 90)) and p90[1] == 50
-    low, high = ten([50, 50]), ten([50, 130])
+    low, high = full([50, 50]), full([50, 130])
     acc = report.acceptance({2012: low, 2017: high, 2023: low})
     assert acc['combined']['over_120'] == 1 and acc['years'][2012]['over_120'] == 0
     assert acc['combined']['stations_over_100'] == [1]
 
 
 def test_acceptance_missing_year_fails_and_none_stations_ignored():
-    r = ten([None, 50])
+    r = full([None, 50])
     acc = report.acceptance({2012: r, 2023: r})
     assert acc['missing_years'] == [2017] and not acc['passed']
     assert acc['combined']['over_100'] == 0
 
 
+def test_acceptance_requires_20_seeds_per_year():
+    """Fix-Runde 5: weniger als 20 Seeds in einem Wetterjahr dürfen nicht als bestanden zählen."""
+    good = full([50] * 100)
+    assert report.MIN_SEEDS == 20 and report.acceptance({y: good for y in report.ACCEPT_YEARS})['passed']
+    few = full([50] * 100, n=19)
+    acc = report.acceptance({2012: good, 2017: few, 2023: good})
+    assert not acc['passed'] and acc['short_seeds'] == [2017]
+    assert report.acceptance({y: good for y in report.ACCEPT_YEARS})['short_seeds'] == []
+    md = report.render({'n_stations': 100, 'cable_share': {'by_route_length': 0.75, 'by_cable_length': 0.72,
+                                                         'target': 0.79, 'band': [0.74, 0.84]},
+                        'trunk_km_per_station': {'route_length': 2.0, 'cable_length': 3.0, 'target': 2.7},
+                        'feeders_per_station': {'mean': 4.4, 'median': 3, 'target': [3.4, 3.8]}, 'km_per_type': {},
+                        'marked': {'feeders_any': 0, 'stations_any': 0, 'stations_any_share': 0.0, 'feeders_long': 0,
+                                   'feeders_sizing': 0}, 'tails': {'feeders': 0, 'stations': 0}}, {}, acc, [], {})
+    assert '**nicht bestanden**' in md and 'Weniger als 20 Seeds' in md
+
+
 def test_acceptance_limit_is_five_of_all_stations():
     """Fix-Runde 1: höchstens 5 Stationen über 100 %, gleich wie viele Stationen es gibt (5 von 465)."""
-    acc = report.acceptance({y: ten([101] * 6 + [50] * 459) for y in report.ACCEPT_YEARS})
+    acc = report.acceptance({y: full([101] * 6 + [50] * 459) for y in report.ACCEPT_YEARS})
     assert not acc['passed'] and acc['n_stations'] == 465 and 'max_over_scaled' not in acc
 
 
 def test_render_states_five_of_n():
-    acc = report.acceptance({y: ten([101] * 5 + [50] * 460) for y in report.ACCEPT_YEARS})
+    acc = report.acceptance({y: full([101] * 5 + [50] * 460) for y in report.ACCEPT_YEARS})
     rep = {'n_stations': 465, 'cable_share': {'by_route_length': 0.75, 'by_cable_length': 0.72, 'target': 0.79,
                                              'band': [0.74, 0.84]},
            'trunk_km_per_station': {'route_length': 2.0, 'cable_length': 3.0, 'target': 2.7},

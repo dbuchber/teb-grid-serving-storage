@@ -1,8 +1,8 @@
-from gridsim.validate import REFERENCE, compare, trend_ok
+from gridsim.validate import HEUTE_LEGACY, REFERENCE, compare, trend_ok
 
 
 def ref_results(scale=1.0):
-    return {k: {'stations_load_congestion': v[0] * scale, 'e_net_mwh': v[1] * scale} for k, v in REFERENCE['load'].items()}
+    return {k: {'stations_load_congestion': v[0] * scale, 'e_net_mwh': v[1] * scale} for k, v in {**REFERENCE['load'], **HEUTE_LEGACY}.items()}
 
 
 def test_compare_flags_outside_tolerance():
@@ -13,10 +13,16 @@ def test_compare_flags_outside_tolerance():
 
 
 def test_small_reference_uses_absolute_floor():
-    res = ref_results(1.0)
-    res[(2023, 'heute')] = {'stations_load_congestion': 4, 'e_net_mwh': 0.9}  # Ref 2 / 0,2
-    rows = [r for r in compare(res) if r['key'] == (2023, 'heute')]
-    assert all(r['ok'] for r in rows)
+    ref = {'load': {(2023, '2030'): (2, 0.2)}}
+    res = {(2023, '2030'): {'stations_load_congestion': 4, 'e_net_mwh': 0.9}}
+    assert all(r['ok'] for r in compare(res, ref))
+    res[(2023, '2030')]['stations_load_congestion'] = 6
+    assert [r['ok'] for r in compare(res, ref)] == [False, True]
+
+
+def test_heute_is_not_checked_against_legacy_reference():
+    assert not any(k[1] == 'heute' for k in REFERENCE['load'])
+    assert not any(r['key'][1] == 'heute' for r in compare(ref_results(1.0)))
 
 
 def test_trend_check():

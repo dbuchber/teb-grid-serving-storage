@@ -8,7 +8,8 @@ Abnahmegrenze (Entscheidung 6, Global Constraints): Szenario heute, PV 1,0, Spei
 Grenzmodus trafo, ohne Netzspeicher, Wetterjahre 2012/2017/2023; je Station und Jahr das P90 über die Seeds der
 höchsten Abschnittsauslastung (``station_line_max_pct``, beide Richtungen), dann das Maximum über die Jahre.
 Bestanden, wenn höchstens 5 Stationen über 100 % und keine über 120 % liegen, gleich wie viele Stationen die
-Variante hat (Controller, Fix-Runde 1: 5 von 465 bei ``prepared-ns``).
+Variante hat (Controller, Fix-Runde 1: 5 von 465 bei ``prepared-ns``). Gilt nur mit allen drei Wetterjahren und
+mindestens ``MIN_SEEDS`` (20) Seeds je Jahr (Fix-Runde 5).
 """
 import json
 import re
@@ -26,6 +27,7 @@ ACCEPT_PARAMS = {'scenario': 'heute', 'pv_factor': 1.0, 'storage': 'base', 'char
 ACCEPT_YEARS = (2012, 2017, 2023)
 LIMIT_PCT, HARD_PCT = 100.0, 120.0
 MAX_OVER = 5
+MIN_SEEDS = 20     # Seeds je Wetterjahr, damit der Befund als Abnahme gilt (Fix-Runde 5)
 SEVERITY = ('keiner', 'trafo', 'leitung', 'beide')     # Gleichstand: schwerere Klasse (wie web/gridsim/band.js)
 CHAIN = ('heute', '2030', '2040')
 ORDER = ('heute', '2030', '2040m', '2040r', '2040')   # Sortierung im Modusvergleich
@@ -93,9 +95,11 @@ def acceptance(by_year, n_stations=None):
     n = int(n_stations if n_stations is not None else len(worst))
     out = {'years': years, 'combined': _verdict(worst, min((len(r) for r in by_year.values()), default=0)),
            'n_stations': n, 'max_over': MAX_OVER,
-           'missing_years': [y for y in ACCEPT_YEARS if y not in by_year], 'worst_p90': worst}
+           'missing_years': [y for y in ACCEPT_YEARS if y not in by_year],
+           'short_seeds': [y for y in sorted(by_year) if len(by_year[y]) < MIN_SEEDS], 'worst_p90': worst}
     c = out['combined']
-    out['passed'] = not out['missing_years'] and c['over_100'] <= MAX_OVER and c['over_120'] == 0
+    out['passed'] = (not out['missing_years'] and not out['short_seeds'] and c['over_100'] <= MAX_OVER
+                     and c['over_120'] == 0)
     return out
 
 
@@ -289,6 +293,8 @@ def render(rep, index, acc, rows, chains):
                   f" ({c['over_100']} über 100 %, {c['over_120']} über 120 %)."]
         if acc['missing_years']:
             L.append(f"Fehlende Wetterjahre: {acc['missing_years']}.")
+        if acc['short_seeds']:
+            L.append(f"Weniger als {MIN_SEEDS} Seeds in den Wetterjahren {acc['short_seeds']}.")
         L.append('')
     if rows:
         L += ['## Vergleich der Modi', '',

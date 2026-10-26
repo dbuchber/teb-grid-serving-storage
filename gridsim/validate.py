@@ -6,11 +6,16 @@ from gridsim.cli import run_batch
 
 # Lastengpass, PV × 1, 257 Stationen: (Stationen mit Engpass, E_netto MWh)
 REFERENCE = {
-    'load': {(2023, 'heute'): (2, 0.2), (2023, '2030'): (39, 12), (2023, '2040'): (193, 337),
-             (2017, 'heute'): (4, 0.4), (2017, '2030'): (52, 28), (2017, '2040'): (200, 1057),
-             (2012, 'heute'): (5, 2.3), (2012, '2030'): (90, 116), (2012, '2040'): (210, 3573)},
+    'load': {(2023, '2030'): (39, 12), (2023, '2040'): (193, 337),
+             (2017, '2030'): (52, 28), (2017, '2040'): (200, 1057),
+             (2012, '2030'): (90, 116), (2012, '2040'): (210, 3573)},
     'feed': {1.0: (1, 3), 1.5: (19, 19), 2.0: (31, 34)},  # Stationen mit Einspeiseengpass (Spanne)
 }
+# „heute“ der Session-18-Tabellen: mit den Alt-Anteilen (WP 0,15, E-Autos 0,08) gerechnet. gridsim zieht „heute“ seit
+# Fix-Runde 2 aus realen Daten (WP 0,23, E-Autos 0,076, ``profiles.SCENARIOS``); der Vergleich ± 30 % entfällt dafür,
+# die Werte stehen nur zur Information im Bericht (die Trafo-Kennzahlen „heute“ sind nicht mehr bitgleich zu
+# origin/feat/gridsim).
+HEUTE_LEGACY = {(2023, 'heute'): (2, 0.2), (2017, 'heute'): (4, 0.4), (2012, 'heute'): (5, 2.3)}
 KPI_INDEX = {'stations_load_congestion': 0, 'e_net_mwh': 1}
 FLOOR = {'stations_load_congestion': 3, 'e_net_mwh': 1.0}  # kleine Referenzwerte: absolute Toleranz
 
@@ -51,6 +56,12 @@ def run_validation(prepared, cache, report, seeds=20, workers=4):
         b = bands[r['key']][r['kpi']]
         lines.append(f"| {r['key'][0]} | {r['key'][1]} | {r['kpi']} | {r['value']:g} | {b['p10']:g}–{b['p90']:g} | "
                      f"{r['reference']:g} | {r['ratio']:.2f} | {'ja' if r['ok'] else 'nein'} |")
+    lines += ['', '„heute“ wird nicht gegen Session 18 geprüft: Die Referenz nutzt die Alt-Anteile (WP 0,15, E-Autos 0,08), '
+                  'gridsim rechnet „heute“ mit den realen Anteilen (WP 0,23, E-Autos 0,076).', '',
+              '| Wetter | Kennzahl | gridsim Median (reale Anteile) | Referenz Session 18 (Alt-Anteile) |', '|---|---|---|---|']
+    for (y, sc), ref in HEUTE_LEGACY.items():
+        for kpi, i in KPI_INDEX.items():
+            lines.append(f"| {y} | {kpi} | {results[(y, sc)][kpi]:g} | {ref[i]:g} |")
     lines += ['', f"Tendenz (heute < 2030 < 2040, 2023 < 2017 < 2012): {'ja' if trend_ok(results) else 'nein'}", '',
               '| PV-Faktor | Stationen mit Einspeiseengpass (Median, Band) | Referenz |', '|---|---|---|']
     for (_, _, _, _, f, *_), b in feed.items():
