@@ -41,3 +41,8 @@
 .gs-key.gs-k-trafo::before { height: 2px; vertical-align: 3px; background: var(--ink2); }
 .gs-key.gs-a-household, .gs-key.gs-a-heat, .gs-key.gs-a-ev, .gs-key.gs-a-pv { fill: none; opacity: 1; }
 .gs-cost-out p { margin: 4px 0; }
+.gs-map-wrap { display: grid; gap: 6px; align-content: start; }
+.gs-map-tools { display: grid; gap: 4px; font-size: 0.85em; color: var(--ink2); }
+.gs-check { display: flex; gap: 6px; align-items: start; }
+.gs-check input { margin-top: 3px; }
+.gs-key-swatch::before { background: var(--sw); }

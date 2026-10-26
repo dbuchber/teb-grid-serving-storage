@@ -267,7 +267,7 @@ async function main() {
   renderV2G();
 
   // Regionen-Dashboard von Session 1f (js/gridsim/dashboard.js, API unter /api/): optional, fehlt es, bleibt der Anker leer
-  import("./gridsim/dashboard.js?v=20261025b").then(mod => {
+  import("./gridsim/dashboard.js?v=20261026a").then(mod => {
     const el = $("region-dashboard");
     el.hidden = false;
     dashboard = mod.mount(el, { apiBase: "/api/", stations: data.stations,
