@@ -261,7 +261,7 @@ Controllers (`.superpowers/sdd/2026-10-25-ns-leitungen/progress.md`). Abweichung
   Stationen (257 + 175). Die Pitch-Fassung mit 257 Trafos bleibt unverändert und wird neben dem Leitungsnachtrag
   gezeigt (Owner: „beide Netze nebeneinander“, Leitungsteil als „Nachtrag nach dem Pitch“ gekennzeichnet).
 - **Entscheidung 6 (Abnahmegrenze):** „höchstens 5 von 257“ gilt als „höchstens 5 Stationen der Variante“, gleich
-  wie viele Stationen sie hat (Controller, Fix-Runde 1: 5 von 465, im Endstand 5 von 432), dazu 20 Seeds je
+  wie viele Stationen sie hat (Controller: 5 von 465 im ersten Lauf, 5 von 487 in Fix-Runde 1, im Endstand 5 von 432), dazu 20 Seeds je
   Wetterjahr. Bestanden auf `prepared-ns-fix4`: 0 Stationen über 100 %, Maximum 88,9 %.
 - **Entscheidung 7 (markierte Abgänge):** Abgänge, die nur am Spannungsfall scheitern, zählen nicht zur 10-%-Grenze
   (Owner, Fix-Runde 4; Spannung wird nach Entscheidung 2 nicht bewertet), werden aber getrennt berichtet

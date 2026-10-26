@@ -11,7 +11,7 @@ TEB AI Hackathon: Critical Infrastructure & Energy Security, 23.–25.10.2026, w
 - **Key result:** home batteries are the wrong tool for winter peaks; they help for short summer peaks and as a bridge until a transformer is replaced. Controlled charging is the cheaper first step.
 - **Profile:** [docs/context/profil-v2.md](docs/context/profil-v2.md). **Threat model:** [docs/bedrohungsmodell.md](docs/bedrohungsmodell.md).
 - **Code:** `gridsim/` (simulation), `api/` (FastAPI), `web/gridsim/` (dashboard), `site/` (presentation), `apps/insight-harbor/` (battery calculator).
-- **Tests:** `uv run pytest` → 78 passed, 1 skipped. Calculator: `bun run test` → 15 passed.
+- **Tests:** `uv run pytest` → 269 passed, 1 skipped. Calculator: `bun run test` → 15 passed.
 - **AI:** a PV detection model on 2025 aerial images (recall 55 %, precision 69 %); its result is shown on the map only, the simulation uses the BOKU PV data. No AI in the control path, by design.
 - **Honesty:** simulation only, nothing was tested against live grids, devices or third-party systems. Real, synthetic and mocked data are marked (table below).
 - **Built with AI coding assistants:** Claude Code for most code and texts; the calculator was generated with Lovable. The team reviewed the results.
