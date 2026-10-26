@@ -50,3 +50,18 @@ def test_batch_defaults_unchanged(tmp_path):
 def test_batch_rejects_bad_netzspeicher(tmp_path):
     with pytest.raises(SystemExit):
         main(['batch', '--prepared', str(tmp_path), '--cache', str(tmp_path), '--netzspeicher', 'maybe'])
+
+
+def test_prepare_feeders_out_without_extra_stations_is_an_error(tmp_path, capsys):
+    """--out ohne --extra-stations wurde früher still ignoriert (Netze landeten in <prepared>/feeders/)."""
+    with pytest.raises(SystemExit) as e:
+        main(['prepare-feeders', '--input', str(tmp_path), '--prepared', str(tmp_path), '--out', str(tmp_path / 'v')])
+    assert e.value.code == 2 and '--extra-stations' in capsys.readouterr().err
+    assert not (tmp_path / 'feeders').exists()
+
+
+def test_help_texts_for_line_options(capsys):
+    with pytest.raises(SystemExit):
+        main(['batch', '--help'])
+    out = capsys.readouterr().out
+    assert 'trafo+leitung' in out and 'Netzspeicher' in out

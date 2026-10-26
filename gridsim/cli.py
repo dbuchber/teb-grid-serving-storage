@@ -64,18 +64,22 @@ def run_batch(prepared, cache, years, scenarios, charging, storage, pv, n_seeds=
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='gridsim')
     sub = ap.add_subparsers(dest='cmd', required=True)
-    p = sub.add_parser('prepare')
+    p = sub.add_parser('prepare', help='Eingangsdaten je Wetterjahr nach --out/<jahr> verdichten')
     p.add_argument('--input', type=Path, required=True)
     p.add_argument('--years', type=int, nargs='+', default=list(runmod.WEATHER_YEARS))
     p.add_argument('--out', type=Path, required=True)
-    f = sub.add_parser('prepare-feeders')
+    f = sub.add_parser('prepare-feeders', help='synthetische NS-Stationsnetze je Station nach <prepared>/feeders/ '
+                       '(nach jedem gridsim prepare neu ausführen)')
     f.add_argument('--input', type=Path, required=True)
     f.add_argument('--prepared', type=Path, required=True)
     f.add_argument('--extra-stations', action='store_true',
                    help='Zusatzstationen für zu lange Abgänge; schreibt eine neue Variante nach --out')
-    f.add_argument('--out', type=Path, help='Ausgabeordner der Variante (nur mit --extra-stations)')
+    f.add_argument('--out', type=Path, help='Ausgabeordner der Variante (nur mit --extra-stations, dort Pflicht)')
+    helps = {'batch': 'Läufe für alle Kombinationen der Optionen in den Cache rechnen',
+             'precompute': 'Mindestumfang für die Live-Demo in den Cache rechnen',
+             'validate': 'Abnahme gegen die Referenzskripte (schreibt --report)'}
     for name in ('batch', 'precompute', 'validate'):
-        b = sub.add_parser(name)
+        b = sub.add_parser(name, help=helps[name])
         b.add_argument('--prepared', type=Path, required=True)
         b.add_argument('--cache', type=Path, required=True)
         b.add_argument('--seeds', type=int, default=20)
@@ -86,8 +90,11 @@ def main(argv=None):
             b.add_argument('--charging', nargs='+', default=['uncontrolled'])
             b.add_argument('--storage', nargs='+', default=['base'])
             b.add_argument('--pv', type=float, nargs='+', default=[1.0])
-            b.add_argument('--limits', nargs='+', default=['trafo'], choices=runmod.LIMITS)
-            b.add_argument('--netzspeicher', nargs='+', default=['off'], choices=list(NETZSPEICHER))
+            b.add_argument('--limits', nargs='+', default=['trafo'], choices=runmod.LIMITS,
+                           help='Grenzen der Steuerung: trafo (Standard, nur Trafo-Grenze) oder '
+                                'trafo+leitung (braucht <prepared>/feeders/, sonst Rückfall auf trafo)')
+            b.add_argument('--netzspeicher', nargs='+', default=['off'], choices=list(NETZSPEICHER),
+                           help='Netzspeicher an Leitungsengpässen: off (Standard) oder on (braucht feeders/)')
         if name == 'validate':
             b.add_argument('--report', type=Path, default=Path('docs/gridsim-abnahme.md'))
     lr = sub.add_parser('lines-report', help='Abnahmebericht NS-Leitungen aus prepared/feeders und dem Cache')
@@ -102,6 +109,8 @@ def main(argv=None):
             print('prepared', y)
     elif args.cmd == 'prepare-feeders':
         from gridsim.feeders.prepare import prepare_feeders
+        if args.out is not None and not args.extra_stations:
+            ap.error('--out gilt nur mit --extra-stations (ohne schreibt prepare-feeders nach <prepared>/feeders/)')
         if args.extra_stations:
             if args.out is None:
                 ap.error('--extra-stations braucht --out')
