@@ -273,7 +273,7 @@
       (90–150) would also get too hot. These numbers depend most on how large the real transformers are (see “How robust”).
       In the <b>2040 moderate</b> case (35 % heat pumps) 152–181 are above their rating with uncontrolled charging,
       but only <span class="good">7–30 with smart charging</span> (optimistic count, see the winter section): there the evening peak comes mainly from the cars.</li>
-  <li><b>Lines: the transformer comes first.</b> In a second, more detailed synthetic grid (432 stations, every cable section sized and checked)
+  <li><b>Lines: the transformer comes first.</b> Added after the pitch: in a second, separate synthetic grid (432 stations, every cable section sized and checked)
       the cables are the first bottleneck at only 5–6 stations in 2030 and 11–17 in 2040 with 50 % heat pumps; the transformer comes first at 46–126 and 214–227.
       Smart charging that respects the cables removes the remaining line overloads (see <a href="#lines">lines</a>).</li>
   <li><b>Electric cars: smart charging solves</b> every case in which heat pumps and households alone stay below the transformer rating.</li>
@@ -343,16 +343,18 @@
      Smart charging is pooled per transformer here: the delayed energy of all cars is caught up wherever there is room, without a limit per
      wallbox or per car. That is an upper bound for its effect, so the remaining counts are rather too low. Our car-by-car model shows the
      same picture at the example transformers, but has not been run for all of them yet.</p>
-  <p class="note"><b>Voltage in winter: our synthetic grids are not good enough.</b> The load flow for the hours with the highest demand shows
+  <p class="note"><b>Voltage in winter: our synthetic grids are not good enough.</b> (This refers to the 257-transformer grid; the line model below is a separate grid.) The load flow for the hours with the highest demand shows
      a voltage drop above 5 % at about 165 of 257 transformers already <i>today</i>, and at 19–27 the calculation does not converge. Real grids
      work today, so our synthetic feeders (median longest feeder about 1 km, along the streets) are too long and too weak. Statements on
      winter voltage need the grid operator's real grid; the results per transformer above are not affected.</p>
 </section>
 <section id="lines">
   <h3>Low-voltage lines: do the cables fail before the transformer?</h3>
-  <p class="takeaway mid">Almost never. In our synthetic low-voltage grid the transformer is the first bottleneck at almost every station;
+  <p class="note"><b>Added after the pitch: line model on a separate synthetic grid</b> (432 stations, 2040 with 50 % heat pumps).
+     The transformer results elsewhere on this page use the 257-transformer grid with 70 % heat pumps in 2040.</p>
+  <p class="takeaway mid">Almost never. In our synthetic low-voltage grid the transformer is the first bottleneck at almost every station that reaches a limit;
      the cables come first at only 5–17 of 432 stations. Smart charging that respects every cable section removes the remaining line overloads
-     without leaving cars less charged.</p>
+     in the main cases (2030 and 2040 with 50 % heat pumps) without leaving cars less charged.</p>
   <p>As of 26 Oct 2026. For this part we built a second, more detailed synthetic grid: each station gets feeders along the streets,
      and every cable section is sized by common planning rules (rated current, 5 % voltage drop, 3 % voltage rise) for today's load.
      257 stations come from map data, 175 more were added where feeders would otherwise be too long or carry too much current: <b>432 stations</b> in total.
@@ -387,11 +389,11 @@
   </div>
   <ul class="findings">
     <li><b>Smart charging and V2G work at the transformer.</b> In 2030 (2012) they cut the overloaded transformers from 127 to 36 and 10.
-        The price is energy the cars lack in a cold spell (280 MWh with smart charging, 508 MWh with V2G in 2040, 2012).</li>
+        The price is energy the cars lack in a cold spell (280 MWh with smart charging, 508 MWh with V2G in 2040 with 50 % heat pumps, weather 2012).</li>
     <li><b>Respecting the lines costs nothing extra here.</b> Smart charging that only watches the transformer leaves 34–40 stations with a line overload,
         because it shares out the charging power without looking at the feeders. If it respects every cable section as well, none is left, and the
-        energy not charged stays the same (280 MWh). In the stress case (2012) 14 stations remain instead of 52. A call therefore has to be able to address
-        one feeder, not only a whole transformer (profile, P4 and P9).</li>
+        energy not charged stays the same (280 MWh). In the stress case (2012) 14 stations remain instead of 52, and slightly more energy stays uncharged. What is controlled here is EV charging. That calls to home batteries should therefore be able to address
+        one feeder, not only a whole transformer (profile, P4 and P9), is our inference; gridsim does not simulate battery calls.</li>
     <li><b>Grid storage helps little.</b> A battery owned by the grid operator behind the most overloaded section of a feeder (2040, 50 %, 2012): 170 such batteries
         with 24.8 MWh in total (146 kWh on average) lower the stations with line overload only from 101 to 88 and the overloaded cable length from
         11.0 to 8.3 km; the transformers hardly change (298 → 296). With line-aware smart charging none is needed.</li>
@@ -402,8 +404,8 @@
     <tbody>
       <tr><td class="l">Today</td><td class="l">21.4 % (23 % of residential buildings)</td><td class="l">0.076</td><td class="l">From Upper Austria statistics: 142,397 of 666,900 homes heat with “solar, heat pumps” (winter 2023/24);
           51,343 electric cars for 672,647 households (end of 2025). Statistik Austria does not publish values per district.</td></tr>
-      <tr><td class="l">2030</td><td class="l">35 %</td><td class="l">0.25</td><td class="l">Plausible but ambitious: AIT for Oesterreichs Energie (2024) implies 31–40 % heat pumps and 0.24 EVs; the Upper Austrian trend gives about 29 % and 0.19.</td></tr>
-      <tr><td class="l"><b>2040, 50 % heat pumps</b> (main case)</td><td class="l">50 %</td><td class="l">0.60</td><td class="l">Within the sources: AIT 48–57 %; replacing every oil, gas and electric heating in Upper Austria gives about 50 %. EVs as AIT (0.60).</td></tr>
+      <tr><td class="l">2030</td><td class="l">35 %</td><td class="l">0.25</td><td class="l">Plausible but ambitious: AIT for Oesterreichs Energie (2024) implies 31–40 % heat pumps and 0.24 EVs; the Upper Austrian trend gives about 29 % and 0.19, so 0.25 EVs is on the high side.</td></tr>
+      <tr><td class="l"><b>2040, 50 % heat pumps</b> (main case)</td><td class="l">50 %</td><td class="l">0.60</td><td class="l">Within the sources: AIT 48–57 %; about 50 % is the upper limit from the Upper Austrian heating mix (every oil, gas and electric heating replaced). EVs as AIT (0.60).</td></tr>
       <tr><td class="l">2040 stress case</td><td class="l">70 %</td><td class="l">0.60</td><td class="l">Not covered by any source we found; more than 20 percentage points of homes with wood or district heating would have to switch.</td></tr>
     </tbody>
   </table></div>
