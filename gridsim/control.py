@@ -2,7 +2,8 @@
 
 Steuerlogiken (Spec § 4): ungesteuert; WiNAP = im Winter Start um 23 Uhr, wenn bis 7 Uhr fertig;
 T3d = an Tagen mit Engpassprognose Start zur Gruppenzeit des Haushalts (22/0/2 Uhr), sonst WiNAP.
-Gesteuertes Laden und V2G drosseln nur Wallboxen gegen 100 % Trafo-Bemessung.
+Gesteuertes Laden und V2G drosseln nur Wallboxen gegen 100 % Trafo-Bemessung (Grenzmodus ``trafo``; gegen Trafo
+und Leitungsabschnitte siehe control_lines.py).
 """
 import hashlib
 from datetime import date, timedelta
@@ -151,10 +152,12 @@ def v2g_with_recharge(base, ev, kva, cars):
     return out, recharge, unmet[:, :DAYS]
 
 
-def storage_flow(p, pv_scale, strategy, wp_station, wp_storage_nodes):
+def storage_flow(p, pv_scale, strategy, wp_station, wp_storage_nodes, return_delta=False):
     """Netto-Stationsfluss (kW, + = Bezug) aus PV, Haushalt und Wärmepumpe, ohne E-Auto.
 
     Nur Knoten mit Heimspeicher laufen durch ``sim.simulate``; alle anderen gehen als Bilanz ein.
+    ``return_delta``: zusätzlich Wirkung des Speichers je Speicherknoten (8760, K) float32 und deren globale
+    Knotenindizes (für Knotenflüsse, nodeflow.py); der Stationsfluss bleibt unverändert.
     """
     kwp = np.asarray(p.nodes_kwp_bins, dtype=float)
     hh = np.asarray(p.nodes_hh, dtype=float)
@@ -167,6 +170,7 @@ def storage_flow(p, pv_scale, strategy, wp_station, wp_storage_nodes):
     hh_st = np.bincount(st, weights=hh, minlength=n_st)
     flow = h0[:, None] * hh_st[None, :] - pv_bins @ kwp_st.T + np.asarray(wp_station, dtype=float)
     idx = np.flatnonzero(np.asarray(p.nodes_kwh) > 0)
+    delta = np.zeros((HOURS, 0))
     if len(idx):
         pv_k = pv_bins @ kwp[idx].T
         load_k = h0[:, None] * hh[idx][None, :] + np.asarray(wp_storage_nodes, dtype=float)
@@ -176,4 +180,6 @@ def storage_flow(p, pv_scale, strategy, wp_station, wp_storage_nodes):
         for j, n in enumerate(idx):
             corr[:, st[n]] += delta[:, j]
         flow += corr
+    if return_delta:
+        return flow.astype(np.float32), delta.astype(np.float32), idx
     return flow.astype(np.float32)

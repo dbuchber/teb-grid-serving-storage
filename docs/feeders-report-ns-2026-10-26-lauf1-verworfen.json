@@ -1,0 +1,199 @@
+{
+ "n_stations": 465,
+ "marked": {
+  "stations_long": 11,
+  "stations_sizing": 20,
+  "stations_any": 29,
+  "stations_any_share": 0.0624,
+  "feeders_long": 29,
+  "feeders_sizing": 32,
+  "feeders_any": 59,
+  "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang, ab 6 Wohngebäuden jenseits der Grenze) oder SizedGrid.marked (Bemessung scheitert); Ausläufer zählen nicht"
+ },
+ "tails": {
+  "stations": 203,
+  "feeders": 398,
+  "reach_m": {
+   "n": 398,
+   "mean": 966.11,
+   "median": 788.6,
+   "p90": 1494.74
+  },
+  "definition": "Abgang zu lang, aber weniger als 6 Wohngebäude jenseits der Grenze und Bemessung erfolgreich (StationGrid.tail); wie jeder Abgang bemessen, nicht markiert"
+ },
+ "cable_share": {
+  "by_cable_length": 0.7217,
+  "by_route_length": 0.7433,
+  "by_cable_length_incl_service": 0.7479,
+  "acceptance": "by_route_length",
+  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben und Parallelsysteme einmal (Abnahmegröße: by_route_length)",
+  "target": 0.79,
+  "band": [
+   0.74,
+   0.84
+  ]
+ },
+ "trunk_km_per_station": {
+  "cable_length": 3.097,
+  "route_length": 2.057,
+  "target": 2.7
+ },
+ "total_km": {
+  "trunk_cable": 1440.2,
+  "trunk_route": 956.34,
+  "service": 302.31
+ },
+ "feeders_per_station": {
+  "n": 465,
+  "mean": 4.36,
+  "median": 3.0,
+  "p90": 8.0,
+  "target": [
+   3.4,
+   3.8
+  ]
+ },
+ "per_building": {
+  "buildings_per_station": {
+   "n": 465,
+   "mean": 38.84,
+   "median": 23.0,
+   "p90": 95.6
+  },
+  "buildings": 18062,
+  "route_m_per_building": 52.9,
+  "target": {
+   "buildings_per_station": 58,
+   "route_m_per_building": 46
+  },
+  "definition": "Gebäude = Wohngebäude (hh > 0); Trasse ohne Hausanschlüsse; nur zur Orientierung"
+ },
+ "areas": {
+  "stadt": {
+   "stations": 142,
+   "feeders": 744,
+   "feeder_reach_m": {
+    "n": 744,
+    "mean": 378.13,
+    "median": 393.9,
+    "p90": 597.64
+   },
+   "trunk_km": 379.62
+  },
+  "ort": {
+   "stations": 227,
+   "feeders": 967,
+   "feeder_reach_m": {
+    "n": 967,
+    "mean": 493.04,
+    "median": 509.0,
+    "p90": 874.84
+   },
+   "trunk_km": 659.98
+  },
+  "streu": {
+   "stations": 96,
+   "feeders": 317,
+   "feeder_reach_m": {
+    "n": 317,
+    "mean": 831.88,
+    "median": 747.9,
+    "p90": 1486.7
+   },
+   "trunk_km": 400.59
+  }
+ },
+ "km_per_type": {
+  "Al 4x25 (Hausanschluss)": 38.38,
+  "Al 4x70": 190.74,
+  "Al 4x95": 210.08,
+  "NAYY 4x150": 175.66,
+  "NAYY 4x240": 200.54,
+  "NAYY 4x35 (Hausanschluss)": 263.94,
+  "NAYY 4x50": 663.17
+ },
+ "thresholds": {
+  "stadt": {
+   "max_nn_m": 35.0,
+   "cable_share": 1.0,
+   "max_feeder_m": 500.0
+  },
+  "ort": {
+   "max_nn_m": 85.0,
+   "cable_share": 0.8,
+   "max_feeder_m": 700.0
+  },
+  "streu": {
+   "max_nn_m": null,
+   "cable_share": 0.5,
+   "max_feeder_m": 1000.0
+  }
+ },
+ "extra_stations": {
+  "stations_old": 257,
+  "stations_added": 245,
+  "stations_dropped": {
+   "old": 1,
+   "new": 0
+  },
+  "stations_reverted_small": 36,
+  "stations_new_kept": 209,
+  "stations_total": 465,
+  "marked_share": {
+   "source": 0.5759,
+   "pass1": 0.135,
+   "pass2": 0.0624
+  },
+  "marked_limit": 0.1,
+  "passes": [
+   {
+    "pass": 1,
+    "planned": 199,
+    "reverted_small_stations": 19,
+    "skipped_small_clusters": 26,
+    "skipped_nodes": 104,
+    "dropped": 0,
+    "stations": 437,
+    "assignment": {
+     "road": 5465,
+     "air": 373,
+     "air_far": 0,
+     "movable": 5838
+    },
+    "marked_share": 0.135
+   },
+   {
+    "pass": 2,
+    "planned": 46,
+    "reverted_small_stations": 17,
+    "skipped_small_clusters": 20,
+    "skipped_nodes": 79,
+    "dropped": 1,
+    "stations": 465,
+    "assignment": {
+     "road": 502,
+     "air": 17,
+     "air_far": 0,
+     "movable": 519
+    },
+    "marked_share": 0.0624
+   }
+  ],
+  "buildings_without_road": {
+   "air_le_600m": 390,
+   "air_gt_600m": 0,
+   "definition": "bewegte Knoten ohne Straßenverbindung, Summe der Durchgänge"
+  },
+  "nodes_moved": 5753,
+  "rule": {
+   "max_cluster": 105,
+   "min_homes": 6,
+   "moves": "nur Knoten der Cluster mit neuer Station",
+   "radius": "max_feeder_m / 1,2",
+   "snap_m": 50.0,
+   "air_max_m": 600.0,
+   "seed": 20261025,
+   "max_passes": 2
+  }
+ }
+}

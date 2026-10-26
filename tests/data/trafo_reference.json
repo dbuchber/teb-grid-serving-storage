@@ -1,0 +1,757 @@
+{
+ "how": "run_seed on tests/fakes.write_fake_prepared (default kva), year 2023, seeds 0 and 1, every CHARGING value",
+ "results": {
+  "default": {
+   "controlled": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      14.7,
+      36.2,
+      0.0
+     ],
+     "worst_day": [
+      150,
+      73,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      28.9,
+      31.2,
+      0.0
+     ],
+     "worst_day": [
+      23,
+      353,
+      0
+     ]
+    }
+   },
+   "t3d": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      14.7,
+      47.3,
+      0.0
+     ],
+     "worst_day": [
+      150,
+      9,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      29.0,
+      33.0,
+      0.0
+     ],
+     "worst_day": [
+      6,
+      13,
+      0
+     ]
+    }
+   },
+   "uncontrolled": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      14.7,
+      36.2,
+      0.0
+     ],
+     "worst_day": [
+      150,
+      73,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      28.9,
+      31.2,
+      0.0
+     ],
+     "worst_day": [
+      23,
+      353,
+      0
+     ]
+    }
+   },
+   "v2g": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      14.7,
+      36.2,
+      0.0
+     ],
+     "worst_day": [
+      150,
+      73,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      28.9,
+      31.2,
+      0.0
+     ],
+     "worst_day": [
+      23,
+      353,
+      0
+     ]
+    }
+   },
+   "winap": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      14.7,
+      47.3,
+      0.0
+     ],
+     "worst_day": [
+      150,
+      9,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.0,
+      "n_stations": 3,
+      "stations_feed_congestion": 0,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      0
+     ],
+     "station_load_kw_max": [
+      29.0,
+      33.0,
+      0.0
+     ],
+     "worst_day": [
+      6,
+      13,
+      0
+     ]
+    }
+   }
+  },
+  "stressed": {
+   "controlled": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      43.5,
+      48.5,
+      0.0
+     ],
+     "worst_day": [
+      351,
+      313,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      42.2,
+      54.1,
+      0.0
+     ],
+     "worst_day": [
+      57,
+      299,
+      0
+     ]
+    }
+   },
+   "t3d": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      60.7,
+      54.5,
+      0.0
+     ],
+     "worst_day": [
+      361,
+      35,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      53.1,
+      80.2,
+      0.0
+     ],
+     "worst_day": [
+      12,
+      330,
+      0
+     ]
+    }
+   },
+   "uncontrolled": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      43.5,
+      48.5,
+      0.0
+     ],
+     "worst_day": [
+      351,
+      313,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      42.2,
+      54.1,
+      0.0
+     ],
+     "worst_day": [
+      57,
+      299,
+      0
+     ]
+    }
+   },
+   "v2g": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      43.5,
+      48.5,
+      0.0
+     ],
+     "worst_day": [
+      351,
+      313,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0.0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      42.2,
+      54.1,
+      0.0
+     ],
+     "worst_day": [
+      57,
+      299,
+      0
+     ]
+    }
+   },
+   "winap": {
+    "0": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      60.7,
+      54.5,
+      0.0
+     ],
+     "worst_day": [
+      361,
+      35,
+      0
+     ]
+    },
+    "1": {
+     "region": {
+      "congestion_h_median": 0,
+      "e_inst_mwh": 0.0,
+      "e_net_mwh": 0.0,
+      "ev_unmet_mwh": 0,
+      "feed_e_net_mwh": 0.121,
+      "n_stations": 3,
+      "stations_feed_congestion": 1,
+      "stations_load_congestion": 0,
+      "storage_units": 0,
+      "trafo_over_1000": 0,
+      "trafo_plus1": 0,
+      "trafo_plus2": 0
+     },
+     "station_congestion_h": [
+      0,
+      0,
+      0
+     ],
+     "station_feed_h": [
+      0,
+      0,
+      1061
+     ],
+     "station_load_kw_max": [
+      53.1,
+      80.2,
+      0.0
+     ],
+     "worst_day": [
+      12,
+      330,
+      0
+     ]
+    }
+   }
+  }
+ },
+ "sets": {
+  "default": {},
+  "stressed": {
+   "pv_factor": 2.0,
+   "scenario": "2040"
+  }
+ },
+ "source_commit": "98113e5"
+}

@@ -2,12 +2,13 @@
 import threading
 from dataclasses import asdict
 
-from gridsim.run import cached_seeds
+from gridsim.run import cached_seeds, feeders_fingerprint
 
 
 class Job:
-    def __init__(self, params, status):
+    def __init__(self, params, status, feeders_fp=None):
         self.params = params
+        self.feeders_fp = feeders_fp   # Netzstand beim Start; anderer Stand → Auftrag nicht wiederverwenden
         self.status = status   # queued | running | done | cached | error
         self.seeds = []
         self.error = None
@@ -44,17 +45,19 @@ class JobManager:
 
     def submit(self, params):
         key = params.key()
+        fp = feeders_fingerprint(self.root)
         with self.lock:
             job = self.jobs.get(key)
-            if job and (not job.finished or (job.status != 'error' and len(job.seeds) >= params.n_seeds)):
-                return job  # läuft schon oder ist fertig
-            cached = cached_seeds(self.cache_dir, params)
+            if job and (not job.finished or (job.status != 'error' and len(job.seeds) >= params.n_seeds
+                                             and job.feeders_fp == fp)):
+                return job  # läuft schon oder ist fertig (mit demselben Netzstand)
+            cached = cached_seeds(self.cache_dir, params, fp)
             if len(cached) >= params.n_seeds:
-                job = Job(params, 'cached')
+                job = Job(params, 'cached', fp)
                 job.seeds = [asdict(r) for r in sorted(cached, key=lambda r: r.index)]
                 self.jobs[key] = job
                 return job
-            job = Job(params, 'running' if self.running < self.max_jobs else 'queued')
+            job = Job(params, 'running' if self.running < self.max_jobs else 'queued', fp)
             self.running += 1
             self.jobs[key] = job
         threading.Thread(target=self._run, args=(job,), daemon=True).start()

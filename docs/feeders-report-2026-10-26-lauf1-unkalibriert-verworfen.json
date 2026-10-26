@@ -1,0 +1,105 @@
+{
+ "n_stations": 257,
+ "marked": {
+  "stations_long": 215,
+  "stations_sizing": 71,
+  "stations_any": 215,
+  "stations_any_share": 0.8366,
+  "feeders_long": 738,
+  "feeders_sizing": 103,
+  "feeders_any": 756,
+  "definition": "Station mit mindestens einem Abgang in StationGrid.marked (zu lang) oder SizedGrid.marked (Bemessung scheitert)"
+ },
+ "cable_share": {
+  "by_cable_length": 0.5956,
+  "by_route_length": 0.5848,
+  "by_cable_length_incl_service": 0.617,
+  "definition": "ohne Hausanschlüsse; Kabellänge zählt parallele Systeme einzeln, Trassenlänge zählt gemeinsame Gräben einmal",
+  "target": 0.79,
+  "band": [
+   0.74,
+   0.84
+  ]
+ },
+ "trunk_km_per_station": {
+  "cable_length": 7.753,
+  "route_length": 4.019,
+  "target": 2.7
+ },
+ "total_km": {
+  "trunk_cable": 1992.47,
+  "trunk_route": 1032.97,
+  "service": 300.74
+ },
+ "feeders_per_station": {
+  "n": 257,
+  "mean": 7.11,
+  "median": 5.0,
+  "p90": 15.4,
+  "target": [
+   3.4,
+   3.8
+  ]
+ },
+ "areas": {
+  "stadt": {
+   "stations": 17,
+   "feeders": 201,
+   "feeder_reach_m": {
+    "n": 201,
+    "mean": 579.0,
+    "median": 497.8,
+    "p90": 1031.6
+   },
+   "trunk_km": 163.1
+  },
+  "ort": {
+   "stations": 171,
+   "feeders": 1363,
+   "feeder_reach_m": {
+    "n": 1363,
+    "mean": 708.63,
+    "median": 679.1,
+    "p90": 1182.6
+   },
+   "trunk_km": 1409.94
+  },
+  "streu": {
+   "stations": 69,
+   "feeders": 264,
+   "feeder_reach_m": {
+    "n": 264,
+    "mean": 993.02,
+    "median": 912.05,
+    "p90": 1610.56
+   },
+   "trunk_km": 419.42
+  }
+ },
+ "km_per_type": {
+  "Al 4x25 (Hausanschluss)": 72.55,
+  "Al 4x70": 261.18,
+  "Al 4x95": 544.52,
+  "NAYY 4x150": 240.64,
+  "NAYY 4x240": 345.16,
+  "NAYY 4x35 (Hausanschluss)": 228.19,
+  "NAYY 4x50": 600.97
+ },
+ "thresholds": {
+  "stadt": {
+   "max_nn_m": 30.0,
+   "cable_share": 1.0,
+   "max_feeder_m": 500.0
+  },
+  "ort": {
+   "max_nn_m": 80.0,
+   "cable_share": 0.8,
+   "max_feeder_m": 700.0
+  },
+  "streu": {
+   "max_nn_m": null,
+   "cable_share": 0.5,
+   "max_feeder_m": 1000.0
+  }
+ }
+}

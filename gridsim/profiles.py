@@ -16,7 +16,16 @@ DAYS = HOURS // 24
 DEADLINE_H = 7  # Ladeende spätestens am Folgetag 7 Uhr (gesteuertes Laden, WiNAP)
 # Szenarien der eingefrorenen Skripte plus ein mittleres 2040: Wärmepumpen wie 2030 (35 %), E-Autos wie 2040.
 # 2040 (70 %) ist der Stressfall für Klimaneutralität; 35 % liegt näher an UBA-WAM und TU-Wien-Szenarien.
-SCENARIOS = {**wpev.SCENARIOS, '2040m': {'wp_share': 0.35, 'ev_share': 0.60}}
+# heute aus dem Ist-Abgleich (Owner, Fix-Runde 2, 25.10.2026; Quellen in docs/gridsim-leitungen-abnahme.md):
+# E-Autos 0,076 je Haushalt = Elektro-Pkw OÖ 51 343 (31.12.2025) / 672 647 Privathaushalte OÖ 2025;
+# Wärmepumpen: OÖ 2023/24 21,4 % der Hauptwohnsitze („Solar, Wärmepumpen“ 142 397 von 666 900). Im Modell zieht
+# assign je Wohngebäude; wp_share 0,23 ergibt 21,4 % der Haushalte (Steyr: weniger Fernwärme, mehr Haushalte in
+# Mehrfamilienhäusern). Die eingefrorenen Werte in legacy (0,15 / 0,08) bleiben unverändert.
+SCENARIOS = {**wpev.SCENARIOS, 'heute': {'wp_share': 0.23, 'ev_share': 0.076},
+             '2040m': {'wp_share': 0.35, 'ev_share': 0.60},
+             # 2040r (Owner, 25.10.2026): Hauptergebnis 2040; WP 50 % (AIT-Szenarien 48–57 %), E-Autos wie 2040.
+             # 2040 (70 %) bleibt als Stresstest (docs/research/2026-10-25-szenarioanteile-wp-ev.md im Hauptrepo).
+             '2040r': {'wp_share': 0.50, 'ev_share': 0.60}}
 
 
 @dataclass
@@ -39,6 +48,8 @@ def assign(p, scenario, rng):
     fw = np.asarray(p.nodes_fw, dtype=bool)
     homes = hh > 0
     fw_frac = fw[homes].mean() if homes.any() else 0.0
+    # dieselbe Formel steht in feeders/prepare.design_loads (Bemessung, DesignRule.wp_share); bei Änderung dort
+    # nachziehen, Test: tests/test_feeders_prepare.py::test_design_rule_uses_same_p_wp_as_assign
     p_wp = min(1.0, share['wp_share'] / max(1 - fw_frac, 1e-9))
     has_wp = homes & ~fw & (rng.random(len(hh)) < p_wp)
     pauschal = np.where(hh == 1, wpev.HEAT_KWH_EFH, wpev.HEAT_KWH_MFH_HH * hh).astype(float)

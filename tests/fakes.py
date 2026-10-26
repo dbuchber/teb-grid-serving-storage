@@ -67,3 +67,62 @@ def big_prepared(n_homes=2000, n_stations=20, year=2023, seed=1):
                     nodes_dhw=np.full(n_homes, np.nan, dtype=np.float32),
                     pv_bins=np.zeros((HOURS, 4), dtype=np.float32), h0=h0, h0_q=np.repeat(h0, 4) / 4,
                     temp_cells=temp, stations=stations)
+
+
+ROADS_CENTER = (14.42, 48.04)      # Kreuzung der beiden Fake-Straßen (lon, lat)
+ROADS_HALF = (0.03, 0.02)          # halbe Armlänge in Grad: etwa 2,2 km je Richtung
+
+
+def fake_roads(path):
+    """Kleines Overpass-JSON: Kreuz aus zwei geraden Straßen (West–Ost, Süd–Nord) um ROADS_CENTER."""
+    lon, lat = ROADS_CENTER
+    dlon, dlat = ROADS_HALF
+    nodes = {1: (lon, lat), 2: (lon - dlon, lat), 3: (lon + dlon, lat), 4: (lon, lat - dlat), 5: (lon, lat + dlat)}
+    elements = [{'type': 'node', 'id': i, 'lon': x, 'lat': y} for i, (x, y) in nodes.items()]
+    elements += [{'type': 'way', 'id': 10, 'nodes': [2, 1, 3], 'tags': {'highway': 'residential'}},
+                 {'type': 'way', 'id': 11, 'nodes': [4, 1, 5], 'tags': {'highway': 'residential'}}]
+    path.write_text(json.dumps({'elements': elements}), encoding='utf-8')
+    return path
+
+
+# Fake-Knoten wie in write_fake_prepared (Station 0, 0, 0, 0, 1, 1, 1, 1, 2, 2), entlang der Ost-West-Straße
+FEEDER_NODE_STATION = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2]
+FEEDER_NODE_OFFSET_M = [(40, 15), (80, -15), (120, 15), (160, -15), (-60, 12), (-110, -12), (-160, 12), (-210, -12),
+                        (30, 300), (60, 330)]
+FEEDER_LEGACY_STATION = [0, 2, 3]   # Legacy-Station 1 hat keine Knoten und fällt beim Verdichten weg
+
+
+def fake_build_members_factory(offsets=FEEDER_NODE_OFFSET_M, extra=()):
+    """``build_members``-Ersatz mit Stationen und Knoten um ROADS_CENTER (EPSG:31287).
+
+    ``extra``: weitere Knoten (Versatz, hh, kWp, Station 0–2) hinter den zehn Standardknoten.
+    """
+    from gridsim.feeders.roads import TO_LAMBERT
+
+    def fake_build_members(inp):
+        from collections import defaultdict
+        c = np.array(TO_LAMBERT.transform(*ROADS_CENTER))
+        st_xy = np.array([c, c + [0, 2000], c + [-20, 0], c + [0, 250]])
+        stations = [{'osm_id': f'way/{i}', 'lon': 0.0, 'lat': 0.0} for i in range(4)]
+        hh = [1, 1, 5, 1, 1, 5, 5, 1, 0, 0]
+        kwp = [8, 10, 0, 0, 6, 0, 0, 0, 60, 40]
+        nodes = [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
+                  'station': FEEDER_LEGACY_STATION[s]} for off, h, k, s in zip(offsets, hh, kwp, FEEDER_NODE_STATION)]
+        nodes += [{'xy': tuple(c + off), 'hh': h, 'kwp': float(k), 'pv': defaultdict(float),
+                   'station': FEEDER_LEGACY_STATION[s]} for off, h, k, s in extra]
+        return stations, st_xy, ['Steyr'] * 4, nodes
+
+    return fake_build_members
+
+
+def align_station_positions(prepared, build_members):
+    """stations.json-Koordinaten aller Jahre auf die (verdichteten) Stationen von ``build_members`` setzen."""
+    from pyproj import Transformer
+    back = Transformer.from_crs(31287, 4326, always_xy=True)
+    _, st_xy, _, _ = build_members(None)
+    lon, lat = back.transform(*np.asarray(st_xy)[FEEDER_LEGACY_STATION].T)
+    for d in sorted(p for p in prepared.iterdir() if p.name.isdigit()):
+        rows = json.loads((d / 'stations.json').read_text())
+        for r, x, y in zip(rows, lon, lat):
+            r['lon'], r['lat'] = float(x), float(y)
+        (d / 'stations.json').write_text(json.dumps(rows))
