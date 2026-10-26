@@ -447,8 +447,9 @@ Simulation, `MODEL_VERSION` unverändert (.5).
 - **Manifest der Stationsnetze** (`feeders/manifest.json`) trägt `model_version` und eine zur aktuellen Regel passende
   Bezeichnung; `load_feeders` warnt bei fehlender oder abweichender Version. Der Cache-Schlüssel ist unverändert.
   `prepared-ns-fix4` auf hetzner wurde nicht neu gebaut: Sein Manifest trägt noch die alte Bezeichnung
-  `fix1-binom-p90-h0peak` und keine Version (die Netze selbst sind der angenommene Stand). Vor dem Einsatz (Task 12)
-  neu bauen.
+  `fix1-binom-p90-h0peak` und keine Version (die Netze selbst sind der angenommene Stand). Bewusst nicht neu gebaut:
+  Der Netz-Fingerabdruck hasht `manifest.json`, ein Neubau würde den abgenommenen Cache `cache-fix4` entwerten. Die
+  Warnung beim Laden dieser Variante ist hinzunehmen (Ruling des Controllers).
 - **Abnahmeurteil** verlangt zusätzlich 20 Seeds je Wetterjahr und alle drei Jahre (`report.MIN_SEEDS`). Der
   Lauf auf `cache-fix4` erfüllt das (20 Seeds in jedem Jahr).
 
