@@ -485,6 +485,21 @@ Fix-Runde 1 (Controller, 25.10.2026):
 - **Netzspeicher-Bemessung** bleibt unverändert.
 - **`MODEL_VERSION` erhöht.** Der Grund sind veraltete Caches mit `trafo+leitung` und die Regeländerung.
 
+Finale Fix-Runde (26.10.2026, nach dem Branch-Review): nur Doku, Warnungen, Fehlermeldungen, CLI und Hinweise; keine
+Änderung an Ergebnissen, Cache-Schlüsseln, Netz-Fingerabdruck oder `MODEL_VERSION`.
+
+- **Spec 4.5, letzte Kennzahl, nicht umgesetzt (offen):** „Anteil der Leitungsüberlast hinter Knoten mit
+  Heimspeicher“ fehlt in Plan, Code und Bericht. Folge der Ruling „Heimspeicher nicht abrufbar“; die Auswertung
+  selbst wäre davon unabhängig möglich, bräuchte aber eine Neurechnung und ist daher nicht nachgebaut.
+- **Netz und prepared-Stand:** `load_feeders` warnt, wenn `prepared/<jahr>/manifest.json` nicht mehr zu dem Stand
+  beim Netzbau passt; passen die Knoten nicht, bricht der Lauf mit Hinweis auf `prepare-feeders` ab.
+- **Alte Netz-Reports gekennzeichnet:** `docs/feeders-report-2026-10-26-lauf1-unkalibriert-verworfen.json`,
+  `…-fix-lauf1-verworfen.json` (beide 257 Stationen, Bemessung erster Lauf) und
+  `docs/feeders-report-ns-2026-10-26-lauf1-verworfen.json` (465 Stationen) gehören zum ersten, verworfenen Lauf.
+  Keiner entspricht `prepared-ns-fix4`; dessen Netzkennzahlen stehen unter „Netzbau (`prepared-ns-fix4`)“, der
+  Report selbst liegt auf hetzner unter
+  `/data/infra-kg-austria/work/gridsim-leitungen/prepared-ns-fix4/feeders/report.json` (nicht ins Repo kopiert).
+
 Aus dem Ledger:
 
 Aus dem Ledger des Controllers (`progress.md`, „Ruling“) und dem Brief; für die Lesart der Zahlen wichtig:
@@ -575,7 +590,16 @@ sind mit dem Fix gerechnet.
 - **Zufall und Seeds:** Wärmepumpen und E-Autos sind je Seed zufällig verteilt; alle Einstellungen haben
   20 Seeds, berichtet ist der Median. Bänder siehe `region.csv` je Einstellung im Cache.
 - **Netzspeicher:** Ort und Größe aus einem Auslegungslauf (Seed 0) je Einstellung, mit perfekter Tagesprognose;
-  Kostensätze für Leitungen sind Platzhalter.
+  Kostensätze für Leitungen sind Platzhalter. An Tagen ohne Engpass fährt der Speicher auf den Startwert desselben
+  Tages und bereitet einen Engpass früh am Folgetag nicht vor (`netzspeicher.dispatch`); so ist `cache-fix4`
+  gerechnet.
+- **„Engpass zuerst“ vergleicht unterschiedliche cos φ:** Der Trafo wird wie bisher mit kW/kVA bewertet (cos φ 1,0,
+  bitgleich zur Pitch-Fassung, `run._line_results`), die Leitung mit cos φ 0,97 bei Bezug (`loading_pct`). Bei
+  gleicher Wirkleistung erscheint die Leitung damit rund 3 % stärker ausgelastet; Grenzfälle, in denen Trafo und
+  Leitung fast gleichzeitig die Grenze erreichen, fallen eher in die Klasse „Leitung“ bzw. „beide“. Die Zahlen
+  „Leitung zuerst“ sind daher eher eine Obergrenze. Am Trafo wurde bewusst nichts geändert.
+- **Tagesansicht im Dashboard:** Die Tageskurve einer Station wird immer mit Trafo-Grenze und ohne Netzspeicher
+  gerechnet; bei Läufen mit `trafo+leitung` oder Netzspeicher steht das als Hinweis darüber.
 
 ## Vierter Lauf, verworfen (Fix-Runde 3, `MODEL_VERSION` 2026-10-26.4)
 

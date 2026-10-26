@@ -2,7 +2,7 @@
 
 TEB AI Hackathon: Critical Infrastructure & Energy Security, 23.–25.10.2026, weXelerate Wien. Challenge-Partner: Smart Grids Austria.
 
-**Pitch:** Ein Interoperabilitätsprofil, mit dem ein Verteilnetzbetreiber Heimspeicher im Engpass signiert, begrenzt und überprüfbar abrufen kann, und eine Jahressimulation aller 257 Trafos in Steyr, die zeigt, wo das hilft und wo nicht.
+**Pitch:** Ein Interoperabilitätsprofil, mit dem ein Verteilnetzbetreiber Heimspeicher im Engpass signiert, begrenzt und überprüfbar abrufen kann, und eine Jahressimulation aller 257 Trafos in Steyr, die zeigt, wo das hilft und wo nicht. Nachtrag nach dem Pitch: synthetische NS-Leitungen auf einem eigenen Netz mit 432 Stationen ([Abnahme](docs/gridsim-leitungen-abnahme.md)).
 
 ## For the jury
 
@@ -20,7 +20,7 @@ TEB AI Hackathon: Critical Infrastructure & Energy Security, 23.–25.10.2026, w
 
 | Pfad | Inhalt |
 |---|---|
-| `gridsim/` | Simulation: Vorbereitung der Eingangsdaten (`prepare.py`), Lauf je Wetterjahr und Szenario (`run.py`, `control.py`, `profiles.py`), Kennzahlen (`metrics.py`), Tagesansicht (`drilldown.py`), Abspielwoche (`playback.py`), Abnahme gegen die Referenz (`validate.py`), CLI (`cli.py`). `legacy/` = eingefrorene Referenzskripte mit SHA256SUMS. |
+| `gridsim/` | Simulation: Vorbereitung der Eingangsdaten (`prepare.py`), Lauf je Wetterjahr und Szenario (`run.py`, `control.py`, `profiles.py`), Kennzahlen (`metrics.py`), Tagesansicht (`drilldown.py`), Abspielwoche (`playback.py`), Abnahme gegen die Referenz (`validate.py`), CLI (`cli.py`). `legacy/` = eingefrorene Referenzskripte mit SHA256SUMS. Nachtrag NS-Leitungen: `feeders/` (synthetische Stationsnetze: Gebietstyp `area.py`, Straßengraph `roads.py`, Topologie `topology.py`, Typen `types.py`, Bemessung `sizing.py`, Bau und Laden `prepare.py`, Zusatzstationen `extra_stations.py`, Auslastung `loading.py`, Abnahmebericht `report.py`), Knotenflüsse je Station (`nodeflow.py`), Laden mit Leitungsgrenzen (`control_lines.py`), Netzspeicher am Leitungsengpass (`netzspeicher.py`). |
 | `api/` | FastAPI-Rechen-API für die Live-Demo (`app.py`: Stationen, Läufe mit Fortschritt per SSE, Tagesansicht, Kosten). |
 | `web/gridsim/` | ES-Module des Dashboards (Karte, Bänder, Diagramme, API-Client), mit `node --test` getestet. |
 | `site/` | Präsentation (`index.html`) und ausführliche Seite (`details.html`); Arbeitskopie unter `docs/context/site/`. |
@@ -30,6 +30,7 @@ TEB AI Hackathon: Critical Infrastructure & Energy Security, 23.–25.10.2026, w
 | `docs/ems-konzept.md` | EMS-Konzept der Box (Kurzfassung: `docs/ems-konzept-kurzfassung.md`). |
 | `docs/research/` | Recherche: Regulierung, Pilotprojekte, Protokolle, Security, Geräte, Förderung, Großspeicher. |
 | `docs/gridsim-abnahme.md` | Abnahme von `gridsim` gegen die Referenzskripte. |
+| `docs/gridsim-leitungen-abnahme.md` | Abnahme der NS-Leitungen (Nachtrag nach dem Pitch): Netzbau, Abnahmegrenze „heute“, Modusvergleich, Grenzen der Aussage. Die `docs/feeders-report-*-verworfen.json` gehören zum ersten, verworfenen Lauf; maßgeblich ist der Stand `prepared-ns-fix4` im Bericht. |
 | `docs/challenge/` | Originaltext der Challenge und Abgabevorlage. |
 | `deploy/` | Dockerfile, Compose und Betriebsnotizen für den Server. |
 | `tests/` | pytest-Suite für `gridsim` und `api`. |
@@ -55,6 +56,25 @@ uv run python -m gridsim batch --prepared prepared --cache cache --years 2023 --
 uv run python -m gridsim validate --prepared prepared --cache cache   # schreibt docs/gridsim-abnahme.md
 GRIDSIM_PREPARED=prepared GRIDSIM_CACHE=cache uv run uvicorn api.app:app_from_env --factory --port 17061
 ```
+
+NS-Leitungen (Nachtrag nach dem Pitch, Bericht: [docs/gridsim-leitungen-abnahme.md](docs/gridsim-leitungen-abnahme.md)):
+
+```sh
+# Stationsnetze nach prepared/feeders/ bauen (nach jedem `gridsim prepare` neu ausführen; sonst warnt der Lauf
+# bzw. bricht mit Hinweis auf prepare-feeders ab)
+uv run python -m gridsim prepare-feeders --input /data/infra-kg-austria/work/steyr-pv-2026-10-24/input --prepared prepared
+# Variante mit Zusatzstationen für zu lange Abgänge in einem eigenen Ordner (--out nur zusammen mit --extra-stations)
+uv run python -m gridsim prepare-feeders --input …/input --prepared prepared --extra-stations --out prepared-ns
+# Läufe mit Leitungsgrenzen und Netzspeicher (beides braucht <prepared>/feeders/, sonst Rückfall auf trafo)
+uv run python -m gridsim batch --prepared prepared-ns --cache cache-ns --years 2012 2017 2023 --scenarios heute 2030 2040r \
+  --charging uncontrolled controlled --limits trafo trafo+leitung --netzspeicher off on
+# Abnahmebericht (Markdown, Zahlen zusätzlich als .json daneben) aus Netzbau und Cache; der Bericht in docs/ ist daraus von Hand ergänzt
+uv run python -m gridsim lines-report --prepared prepared-ns --cache cache-ns --report out/lines-report.md
+```
+
+Die Leitungszahlen beruhen auf einer eigenen Variante mit Zusatzstationen (`prepared-ns-fix4`, 432 Stationen) und
+nicht auf den 257 Trafos der Pitch-Fassung; „2040“ heißt dort 50 % Wärmepumpen (`2040r`), 70 % ist der Stresstest.
+Standard bleibt `--limits trafo --netzspeicher off`.
 
 Betrieb im Container: siehe [deploy/README.md](deploy/README.md).
 

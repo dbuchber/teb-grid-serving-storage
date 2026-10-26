@@ -231,3 +231,55 @@ Platzhalter wie bisher, statt mit ihnen zu rechnen.
 Datenformat der Abschnitte, Blockgröße für den Speicher, genaue R/X-Werte je Typ (mit Quelle), Aufteilung in
 Module, Wiederverwendung von `steyr_lv_roads` (Kopie nach gridsim mit Herkunftsvermerk oder Import), Reihenfolge
 der Schritte. Rechnen auf hetzner, nicht am Mac.
+
+## 8. Stand nach Umsetzung (26.10.2026)
+
+Nachtrag nach dem Branch-Review von `feat/ns-leitungen`. Der Entwurf oben bleibt als historisches Dokument stehen;
+maßgeblich für den umgesetzten Stand sind der Abnahmebericht [`docs/gridsim-leitungen-abnahme.md`](../../gridsim-leitungen-abnahme.md)
+(abgenommener Stand `prepared-ns-fix4`, `MODEL_VERSION` 2026-10-26.5, Cache `cache-fix4`) und das Ledger des
+Controllers (`.superpowers/sdd/2026-10-25-ns-leitungen/progress.md`). Abweichungen vom Entwurf:
+
+- **4.1 Gebietsschwellen:** einmal kalibriert auf stadt < 35 m, ort 35–85 m, streu > 85 m (Startwerte 30/80 m
+  ergaben 68,6 % Kabel; +5 m ist die kleinste Verschiebung ins Band 74–84 %), danach fest. Kabelanteil nach
+  Trassenlänge im Endstand 74,4 % (Kalibrierlauf 75,3 %). Kabelanteile je Typ und Stranggrenzen wie im Entwurf.
+- **4.2 Prüfziele:** 4,61 Abgänge und 2,22 km Trasse je Station statt 3,4–3,8 und ca. 2,7 km; im Bericht
+  ausgewiesen, Zielwerte gelten als Orientierung (Ruling). Ausläufer mit weniger als 6 Wohngebäuden bekommen keine
+  Zusatzstation und zählen nicht zur 10-%-Grenze; Direktabgang ab mehr als 30 kWp.
+- **4.3 Typliste:** umgesetzt sind Kabel NAYY 4x50, 4x150, 4x240 und Freileitung Al 4x70, Al 4x95 (Grenzströme
+  Weisenstein et al. 2022, Tab. 10, wie in den Global Constraints). **NAYY 4x95 und Al 4x35 aus der Liste oben gibt
+  es nicht**, weil die Quelle für sie keinen Grenzstrom nennt. Hausanschlüsse NAYY 4x35 bzw. Al 4x25 werden nicht
+  bemessen, aber bewertet. Seit Fix-Runde 2 Mindestquerschnitt im Strang in stadt/ort: NAYY 4x150 bzw. Al 4x95
+  (Owner „Ist-Abgleich“; übliche Praxis, kein Steyr-Beleg).
+- **4.3 / Entscheidung 5 Auslegungslast:** nicht mehr Erwartungswert und nicht n · P_HH · g(n), sondern (Rulings
+  Fix-Runden 1 und 3): Haushalte n · max(P_HH · g(n), H0-Spitze); Wärmepumpen die k größten vollen Leistungen
+  mit k = P90 Binomial(m, p_wp); E-Autos k · p_ev(k) mit k = P90 Binomial(n, ev_share). Auslegungsjahr 2012,
+  ein Netz für alle Wetterjahre bleibt. Grund: Mit Erwartungswerten verfehlte das Netz die Abnahmegrenze „heute“.
+- **Szenario „heute“** nutzt seit Fix-Runde 2 Ist-Anteile für Oberösterreich (WP 0,23 je berechtigtem Gebäude,
+  E-Autos 0,076 je Haushalt, Owner „Ist-Abgleich“); die Trafo-Kennzahlen „heute“ sind damit nicht mehr bitgleich zur
+  Pitch-Fassung, alle anderen Szenarien schon.
+- **Entscheidung 1 (Zusatzstationen):** umgesetzt als eigene Variante; Endstand `prepared-ns-fix4` mit 432
+  Stationen (257 + 175). Die Pitch-Fassung mit 257 Trafos bleibt unverändert und wird neben dem Leitungsnachtrag
+  gezeigt (Owner: „beide Netze nebeneinander“, Leitungsteil als „Nachtrag nach dem Pitch“ gekennzeichnet).
+- **Entscheidung 6 (Abnahmegrenze):** „höchstens 5 von 257“ gilt als „höchstens 5 Stationen der Variante“, gleich
+  wie viele Stationen sie hat (Controller, Fix-Runde 1: 5 von 465, im Endstand 5 von 432), dazu 20 Seeds je
+  Wetterjahr. Bestanden auf `prepared-ns-fix4`: 0 Stationen über 100 %, Maximum 88,9 %.
+- **Entscheidung 7 (markierte Abgänge):** Abgänge, die nur am Spannungsfall scheitern, zählen nicht zur 10-%-Grenze
+  (Owner, Fix-Runde 4; Spannung wird nach Entscheidung 2 nicht bewertet), werden aber getrennt berichtet
+  (122 Abgänge an 93 Stationen). Markiert im Endstand: 41 von 432 Stationen (9,5 %).
+- **4.4 Spannung als Hinweis in der Detailansicht:** nicht umgesetzt (im Entwurf optional).
+- **4.5 Steuerung:** Grenzmodus `trafo` / `trafo+leitung` wie geplant. **Heimspeicher werden nicht abgerufen**
+  (Ruling: gridsim hat keine Abruflogik für Heimspeicher), Abrufe je Abgang macht nur der Netzspeicher.
+  V2G-Nachladen ist im Leitungsmodus je Knoten begrenzt. **Die Auswertung „Anteil der Leitungsüberlast hinter
+  Knoten mit Heimspeicher“ ist nicht umgesetzt** und steht als offene Abweichung im Abnahmebericht; sie wäre
+  unabhängig von den Abrufen möglich, bräuchte aber eine Neurechnung.
+- **4.6 Netzspeicher:** wie geplant, aber vor der E-Auto-Steuerung eingesetzt; er sieht bei gesteuertem Laden nur den
+  Grundfluss. An Tagen ohne Engpass fährt er auf den Startwert desselben Tages (bereitet einen Engpass früh am
+  Folgetag nicht vor).
+- **4.7 Kosten:** ein einziger Platzhalter `line_eur_per_m` (keine getrennten Sätze Stadt/Land), solange ohne
+  Quelle nicht gerechnet. Netzspeicher werden mit dem Heimspeicher-Satz `storage_eur_per_kwh` (600 €/kWh) bewertet.
+- **Szenario 2040r** (50 % Wärmepumpen, 0,60 E-Autos) ist nach Owner-Entscheidung das Hauptergebnis 2040 für die
+  Leitungen; 2040 (70 %) heißt dort Stresstest.
+- **„Engpass zuerst“** vergleicht den Trafo mit cos φ 1,0 (kW/kVA, bitgleich) und die Leitung mit cos φ 0,97;
+  Grenzfälle fallen dadurch eher in die Klasse „Leitung“ (im Bericht unter „Grenzen der Aussage“).
+- **Dashboard-Tagesansicht** rechnet weiter nur mit Trafo-Grenze und ohne Netzspeicher und sagt das bei Läufen mit
+  Leitungsgrenzen oder Netzspeicher (Ruling, finales Review).
