@@ -100,7 +100,17 @@ test("effectiveNotice: empty when settings were honoured or no seed yet", () => 
 
 test("effectiveNotice: tells when line limits or grid storage could not be applied", () => {
   const s = [{ extra: { limits_effective: "trafo", netzspeicher_effective: false } }];
-  assert.match(effectiveNotice(s, { limits: "trafo+leitung", netzspeicher: false }), /No line data for this weather year .* transformer limits only/);
+  assert.match(effectiveNotice(s, { limits: "trafo+leitung", netzspeicher: false }), /No line data on this server .* transformer limits only/);
   assert.match(effectiveNotice(s, { limits: "trafo", netzspeicher: true }), /Grid storage .* not applied/);
   assert.match(effectiveNotice(s, { limits: "trafo+leitung", netzspeicher: true }), /transformer limits only.*Grid storage/s);
+});
+
+import { DAY_TRAFO_ONLY, dayNotice } from "./band.js";
+
+test("dayNotice: day view says it ignores line limits and grid storage when the run used them", () => {
+  assert.equal(dayNotice({ limits: "trafo", netzspeicher: false }), "");
+  assert.equal(dayNotice(null), "");
+  assert.equal(dayNotice({ limits: "trafo+leitung", netzspeicher: false }), DAY_TRAFO_ONLY);
+  assert.equal(dayNotice({ limits: "trafo", netzspeicher: true }), DAY_TRAFO_ONLY);
+  assert.match(DAY_TRAFO_ONLY, /transformer limit only, without grid storage/);
 });

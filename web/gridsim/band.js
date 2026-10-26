@@ -66,14 +66,21 @@ export function lineStations(values, ids, idxs = ids.map((_, i) => i)) {
   return ids.flatMap((id, i) => ["leitung", "beide"].includes(values?.get(id)) ? [idxs[i]] : []);
 }
 
-// Hinweis, wenn ein Lauf die gewählten Grenzen nicht anwenden konnte (z. B. Wetterjahr ohne Stationsnetze);
+// Die Tagesansicht (/api/stations/{id}/day) rechnet immer mit Trafo-Grenze und ohne Netzspeicher; Hinweis, wenn der
+// Lauf (bzw. vor dem ersten Lauf die Auswahl) Leitungsgrenzen oder Netzspeicher nutzt, sonst leer
+export const DAY_TRAFO_ONLY = "Day curve shows the transformer limit only, without grid storage.";
+export function dayNotice(settings) {
+  return settings && (settings.limits === "trafo+leitung" || settings.netzspeicher === true) ? DAY_TRAFO_ONLY : "";
+}
+
+// Hinweis, wenn ein Lauf die gewählten Grenzen nicht anwenden konnte (Server ohne Stationsnetze);
 // leer, wenn alles galt oder ältere Seeds keine Angabe haben
 export function effectiveNotice(seeds, requested) {
   const e = seeds.map(s => s.extra).find(x => x && "limits_effective" in x);
   if (!e) return "";
   const parts = [];
   if (requested.limits === "trafo+leitung" && e.limits_effective !== "trafo+leitung")
-    parts.push("No line data for this weather year – computed with transformer limits only.");
+    parts.push("No line data on this server – computed with transformer limits only.");
   if (requested.netzspeicher && e.netzspeicher_effective === false)
     parts.push("Grid storage at line bottlenecks was not applied (needs line data).");
   return parts.join(" ");

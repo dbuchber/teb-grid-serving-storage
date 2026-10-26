@@ -50,8 +50,8 @@ test("lines and startRun pass the new parameters through", async () => {
   const calls = [];
   const fetchFn = async (url, init) => { calls.push([url, init]); return { ok: true, json: async () => ({ ok: 1 }) }; };
   const api = createApi("/api/", { fetchFn, EventSourceCls: null });
-  await api.lines(2012);
-  assert.equal(calls[0][0], "/api/lines?weather_year=2012");
+  await api.lines();
+  assert.equal(calls[0][0], "/api/lines");
   await api.startRun({ limits: "trafo+leitung", netzspeicher: true });
   assert.deepEqual(JSON.parse(calls[1][1].body), { limits: "trafo+leitung", netzspeicher: true });
 });

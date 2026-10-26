@@ -50,7 +50,7 @@ export function createApi(base = "/api/", { fetchFn = (...a) => fetch(...a), Eve
   return {
     options: () => json("options"),
     stations: year => json(`stations?weather_year=${year}`),
-    lines: year => json(`lines?weather_year=${year}`),
+    lines: () => json("lines"),   // ein Netz für alle Wetterjahre
     startRun: params => post("runs", params),
     status: id => json(`runs/${encodeURIComponent(id)}`),
     streamRun,

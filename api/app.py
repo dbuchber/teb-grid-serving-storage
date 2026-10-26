@@ -101,9 +101,9 @@ def create_app(prepared_root=None, cache_dir=None, runner=None, max_jobs=None, w
         return out
 
     @r.get('/lines')
-    def lines(weather_year: int = 2023):
-        if weather_year not in runmod.WEATHER_YEARS:
-            return _error(400, f'weather_year must be one of {list(runmod.WEATHER_YEARS)}')
+    def lines():
+        """Stationsnetze hängen nicht vom Wetterjahr ab (ein Netz für alle Jahre); ein ``weather_year`` in der
+        Anfrage (ältere Seitenkopie site/js/gridsim) wird ignoriert."""
         f = root / 'feeders' / 'lines.geojson'
         if not f.exists():
             return _error(404, 'no LV lines prepared')

@@ -261,7 +261,9 @@ def test_lines_geojson_with_feeders(tmp_path):
     client = TestClient(create_app(prepared_root=root, cache_dir=tmp_path / 'cache', runner=FakeRunner()))
     r = client.get('/api/lines', params={'weather_year': 2023})
     assert r.status_code == 200 and r.json()['features'][0]['properties']['station'] == 0
-    assert client.get('/api/lines', params={'weather_year': 2020}).status_code == 400
+    # ein Netz für alle Wetterjahre: weather_year wird ignoriert (ältere Seitenkopie schickt es noch mit)
+    assert client.get('/api/lines', params={'weather_year': 2020}).status_code == 200
+    assert client.get('/api/lines').status_code == 200
 
 
 def test_costs_pass_line_and_netzspeicher_medians(make, monkeypatch):

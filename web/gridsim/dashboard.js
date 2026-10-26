@@ -1,7 +1,7 @@
 // Regionen-Dashboard (Session 1f): echte gridsim-Läufe über alle Stationen des Servers, Band wächst mit jedem Seed.
 // Einbettung: mount(el, { apiBase: "/api/", stations, onSelectStation }) – siehe app.js der Seite.
 import { createApi } from "./api.js";
-import { BOTTLENECK, bandOf, bottleneckClass, bottleneckValues, costItems, effectiveNotice, fmt, lineStations, stationValues } from "./band.js";
+import { BOTTLENECK, bandOf, bottleneckClass, bottleneckValues, costItems, dayNotice, effectiveNotice, fmt, lineStations, stationValues } from "./band.js";
 import { el, regionTitle, renderCompare, renderDay, renderStrip, renderTiles } from "./charts.js";
 import { createStationMap } from "./map.js";
 
@@ -25,7 +25,7 @@ const COMPARE_KPI = { stations_load_congestion: ["Overloaded transformers", 0], 
 
 export function mount(root, { apiBase = "/api/", stations, onSelectStation = () => {} } = {}) {
   const api = createApi(apiBase);
-  const state = { ...DEFAULTS, seeds: [], nSeeds: 20, runId: null, ids: [], idxs: [], stop: null, selected: null, options: null };
+  const state = { ...DEFAULTS, seeds: [], nSeeds: 20, runId: null, ids: [], idxs: [], stop: null, selected: null, options: null, runSettings: null };
   const select = (name, values) => el("label", { class: "gs-field" }, el("span", { text: FIELD_LABELS[name] }),
     el("select", { name, onchange: e => { state[name] = NUMERIC.includes(name) ? +e.target.value : name === "netzspeicher" ? e.target.value === "true" : e.target.value; } },
       ...values.map(v => el("option", { value: v, text: LABELS[name][v] ?? v, selected: String(v) === String(state[name]) || undefined }))));
@@ -38,7 +38,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
   const linesHint = el("span", { class: "gs-hint", role: "status" });
   const linesToggle = el("input", { type: "checkbox", onchange: e => toggleLines(e.target.checked) });
   const mapTools = el("div", { class: "gs-map-tools" },
-    el("label", { class: "gs-check" }, linesToggle, el("span", { text: "Show LV lines (solid = cable, dashed = overhead; thick orange = stations where a line limits first)" })),
+    el("label", { class: "gs-check" }, linesToggle, el("span", { text: "Show LV lines (solid = cable, dashed = overhead; thick orange = stations where a line limits first or together with the transformer)" })),
     linesHint, legend);
   const day = el("div", { class: "gs-chart gs-day-box" }, el("p", { class: "gs-hint", text: "Click a station on the map to see its worst day in 15-minute steps." }));
   const compareBox = el("div", { class: "gs-chart" });
@@ -69,7 +69,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
   function redraw() {
     renderTiles(tiles, state.seeds, state.nSeeds);
     renderStrip(strip, state.seeds, "stations_load_congestion", "Overloaded transformers per seed", 0);
-    // Läufe mit Stationsnetzen: Farbe = erster Engpass (Median-Klasse über die bisherigen Seeds), sonst Überlaststunden
+    // Läufe mit Stationsnetzen: Farbe = erster Engpass (häufigste Klasse über die bisherigen Seeds, Gleichstand: schwerere), sonst Überlaststunden
     const bn = bottleneckValues(state.seeds, state.ids);
     if (bn) map.update(bn, bottleneckClass); else map.update(stationValues(state.seeds, state.ids, "station_congestion_h"));
     map.highlightLines(bn ? lineStations(bn, state.ids, state.idxs) : []);
@@ -94,7 +94,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
     if (!on || linesLoaded) { linesHint.textContent = ""; return; }
     linesHint.textContent = "Loading lines…";
     try {
-      map.setLines(await api.lines(state.weather_year));
+      map.setLines(await api.lines());
       linesLoaded = true;
       linesHint.textContent = "";
     } catch (e) {
@@ -116,6 +116,7 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
       state.idxs = list.map(s => s.idx);   // Stationsindex der Leitungsdaten
       title.textContent = regionTitle(list.length);
       const asked = { limits: state.limits, netzspeicher: state.netzspeicher };
+      state.runSettings = asked;   // für den Hinweis in der Tagesansicht
       const say = text => { const n = effectiveNotice(state.seeds, asked); status.textContent = n ? `${text} · ${n}` : text; };
       const r = await api.startRun(params());
       state.runId = r.run_id;
@@ -148,7 +149,9 @@ export function mount(root, { apiBase = "/api/", stations, onSelectStation = () 
       const c = await api.day(id, { weather_year, scenario, pv_factor, charging, storage, seed: 0 });
       const head = el("p", { class: "gs-hint", text: `${id} · worst day ${c.date} · peak ${fmt(Math.max(...c.trafo_kw))} kW at ${fmt(c.kva)} kVA · ${LABELS.charging[charging]} · seed 1` });
       const box = el("div");
-      day.replaceChildren(head, box);
+      // Tageskurve kommt immer aus dem Trafo-Pfad ohne Netzspeicher (api/app.py, drilldown.py)
+      const note = dayNotice(state.runSettings ?? state);
+      day.replaceChildren(head, ...(note ? [el("p", { class: "gs-hint gs-day-note", role: "note", text: note })] : []), box);
       renderDay(box, c);
     } catch (e) {
       day.replaceChildren(el("p", { class: "gs-hint", text: e.message.startsWith("no model data") ? `No model data for ${id}.` : `Could not load the day: ${e.message}` }));
