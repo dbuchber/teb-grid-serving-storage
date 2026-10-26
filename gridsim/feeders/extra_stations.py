@@ -64,8 +64,7 @@ def _marked_local(grid, sized):
     return np.flatnonzero(bad[node_feeder(grid)])
 
 
-def plan_extra(st_xy, nodes_xy, nodes_hh, nodes_station, grids: dict, roads=None, station_ids=None,
-               start=1, skipped=None) -> list[dict]:
+def plan_extra(nodes_xy, nodes_hh, grids: dict, roads=None, station_ids=None, start=1, skipped=None) -> list[dict]:
     """Neue Stationsstandorte für alle Stationen mit markiertem Abgang (siehe Moduldoku, Schritt 2).
 
     ``grids``: {s: (StationGrid, SizedGrid, ...)}; Knotenarrays global. ``parent`` ist ``station_ids[s]`` bzw. der
@@ -223,7 +222,7 @@ def prepare_extra_stations(input_dir: Path, prepared_root: Path, out_root: Path,
             break
         st_xy = np.array([[s['x'], s['y']] for s in stations], dtype=float)
         skipped = []
-        new = plan_extra(st_xy, xy, hh, st_of, grids, roads=roads, station_ids=[s['id'] for s in stations],
+        new = plan_extra(xy, hh, grids, roads=roads, station_ids=[s['id'] for s in stations],
                          start=next_id, skipped=skipped)
         movable = np.concatenate([s['members'] for s in new]) if new else np.zeros(0, int)
         uw = {s['id']: s['uw'] for s in stations}

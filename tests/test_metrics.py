@@ -113,3 +113,11 @@ def test_costs_line_eur():
     assert c2['line_eur'] == 250.0 * 200.0 and 'line_eur_per_m' not in c2['placeholders']
     c3 = metrics.costs(dict(k, line_over_m=None), dict(metrics.COST_DEFAULTS, line_eur_per_m=200.0))
     assert c3['line_eur'] is None
+
+
+def test_line_limit_from_one_constant():
+    """Minor 3 (finales Review): Bewertung und Abnahme leiten die 100-%-Grenze aus sizing.I_LIMIT ab."""
+    from gridsim import metrics
+    from gridsim.feeders import report, sizing
+    assert metrics.LINE_LIMIT_PCT == 100.0 * sizing.I_LIMIT == 100.0
+    assert report.LIMIT_PCT == metrics.LINE_LIMIT_PCT

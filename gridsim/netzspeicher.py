@@ -1,6 +1,6 @@
 """Netzspeicher am Leitungsengpass (Spec 4.6): Speicher des Netzbetreibers, nicht des Kunden.
 
-- **Ort** (``place``): je Abgang mit Überlast (> 100 % Grenzstrom) der Abschnitt mit der höchsten Auslastung;
+- **Ort** (``bottlenecks``, ``node_behind``): je Abgang mit Überlast (> 100 % Grenzstrom) der Abschnitt mit der höchsten Auslastung;
   der Speicher sitzt am Knoten direkt dahinter. Endet der Abschnitt an einem Abzweig, ist das der Knoten mit dem
   kürzesten Weg ab dem Abschnitt (Knoten = Gebäude, das Modell kennt keine Speicher an Abzweigen). Höchstens ein
   Speicher je Abgang. Sein Fluss wirkt auf alle Abschnitte des Pfads Knoten → Sammelschiene und auf den Trafo.
@@ -13,7 +13,9 @@
   ist Pflicht; lo > 0: Einspeiseüberlast, Laden um lo ist Pflicht (beides begrenzt durch Leistung und
   Ladezustand). In allen anderen Stunden fährt der Speicher innerhalb des Bands auf einen Ziel-Ladezustand:
   vor dem ersten Engpass des Tages auf den Startwert des Tages, zwischen den Engpässen hält er, nach dem letzten
-  (und an Tagen ohne Engpass) auf den Startwert des Folgetags. Startwert = 50 % der Kapazität, verschoben so weit
+  auf den Startwert des Folgetags. An Tagen ohne Engpass fährt er den ganzen Tag auf den Startwert dieses Tages
+  (im Code ``first[d] == 24``), bereitet also einen Engpass früh am Folgetag nicht vor; das ist der abgenommene
+  Stand (cache-fix4), eine Änderung bräuchte eine neue ``MODEL_VERSION``. Startwert = 50 % der Kapazität, verschoben so weit
   nötig, dass die Pflichtstunden des Tages (Prognose ohne Grenzen der Kapazität) nicht an 0 oder an der Kapazität
   anstoßen. Ladezustand zu Jahresbeginn 50 %, Wirkungsgrad 0,95 je Richtung wie die Heimspeicher.
 - ``plan_station``/``apply`` verbinden das mit dem Lauf (run.py): Bemessung im Auslegungslauf, Einsatz je Seed.
@@ -54,11 +56,6 @@ def node_behind(grid, j):
 def path_segments(grid, node):
     """Abschnitte zwischen dem lokalen Knoten ``node`` und der Sammelschiene (aufsteigend)."""
     return np.sort(grid.downstream.tocsc()[:, node].indices)
-
-
-def place(grid, loading_pct):
-    """(Abgang, lokaler Knoten) je Abgang mit Überlast, höchstens einer je Abgang (Moduldoku)."""
-    return [(k, node_behind(grid, j)) for k, j in bottlenecks(grid, loading_pct)]
 
 
 def size(seg_flow_at, limit_kw):

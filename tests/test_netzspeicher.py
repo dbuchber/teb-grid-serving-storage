@@ -114,17 +114,22 @@ def toy_grid(i_max=(60.0, 30.0, 30.0, 60.0, 40.0)):
     return grid, sized
 
 
+def place(grid, pct):
+    """Ort je Abgang wie in ``plan_station``: Engpassabschnitt, dann Knoten dahinter."""
+    return [(k, netzspeicher.node_behind(grid, j)) for k, j in netzspeicher.bottlenecks(grid, pct)]
+
+
 def test_place_one_per_feeder():
     grid, _ = toy_grid()
     pct = np.full((H, 5), 50.0, np.float32)
     pct[10, 0], pct[11, 1], pct[12, 2] = 130.0, 110.0, 120.0      # Abgang 0: Abschnitt 0 am stärksten
     pct[13, 3], pct[14, 4] = 101.0, 150.0                          # Abgang 1: Hausanschluss 4
-    got = netzspeicher.place(grid, pct)
+    got = place(grid, pct)
     # Abschnitt 0 endet an einem Abzweig: nächster Knoten dahinter ist Knoten 1 (10 m statt 20 m)
     assert got == [(0, 1), (1, 2)]
     pct[:, 3:] = 99.0                                               # Abgang 1 ohne Überlast
-    assert netzspeicher.place(grid, pct) == [(0, 1)]
-    assert netzspeicher.place(grid, np.zeros((H, 5), np.float32)) == []
+    assert place(grid, pct) == [(0, 1)]
+    assert place(grid, np.zeros((H, 5), np.float32)) == []
 
 
 def test_plan_station_sizes_bottleneck():

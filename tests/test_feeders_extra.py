@@ -51,7 +51,7 @@ def test_extra_station_splits_long_feeder(roads):
     grids = grids_for(st_xy, xy, st_of, roads)
     assert grids[0][0].area == 'stadt' and marked_share(grids) == 1.0
 
-    new = plan_extra(st_xy, xy, np.ones(len(xy), int), st_of, grids, roads=roads, station_ids=['way/1'])
+    new = plan_extra(xy, np.ones(len(xy), int), grids, roads=roads, station_ids=['way/1'])
     assert len(new) == 1
     site = np.array([new[0]['x'], new[0]['y']])
     assert np.hypot(*(xy[8:] - site).T).min() <= SNAP_M          # an einem Gebäude, auf die Straße gezogen
@@ -71,7 +71,7 @@ def test_new_station_ids_and_flags(roads):
     st_xy = C[None, :]
     st_of = np.zeros(len(xy), int)
     grids = grids_for(st_xy, xy, st_of, roads)
-    new = plan_extra(st_xy, xy, np.ones(len(xy), int), st_of, grids, roads=roads, station_ids=['way/1'], start=7)
+    new = plan_extra(xy, np.ones(len(xy), int), grids, roads=roads, station_ids=['way/1'], start=7)
     assert len(new) == 2
     assert [s['id'] for s in new] == ['demo:steyr:ns-007', 'demo:steyr:ns-008']
     for s in new:
@@ -104,7 +104,7 @@ def test_compact_cluster_of_100_gives_one_station(roads):
     st_of = np.zeros(len(xy), int)
     grids = grids_for(st_xy, xy, st_of, roads)
     assert grids[0][0].marked.any()
-    new = plan_extra(st_xy, xy, np.ones(len(xy), int), st_of, grids, roads=roads)
+    new = plan_extra(xy, np.ones(len(xy), int), grids, roads=roads)
     assert len(new) == 1
     assert all(s['parent'] == 0 for s in new)                     # ohne station_ids: Index der Elternstation
 
@@ -125,7 +125,7 @@ def test_tail_of_three_gets_no_station(roads):
     assert grid.tail.sum() >= 1 and not grid.marked.any() and not sized.marked.any()
     assert marked_share(grids) == 0.0
     skipped = []
-    assert plan_extra(C[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads, skipped=skipped) == []
+    assert plan_extra(xy, np.ones(len(xy), int), grids, roads=roads, skipped=skipped) == []
 
 
 def test_tail_of_eight_gets_station(roads):
@@ -133,7 +133,7 @@ def test_tail_of_eight_gets_station(roads):
     st_of = np.zeros(len(xy), int)
     grids = grids_for(C[None, :], xy, st_of, roads)
     assert grids[0][0].area == 'ort' and grids[0][0].marked.any()
-    new = plan_extra(C[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads)
+    new = plan_extra(xy, np.ones(len(xy), int), grids, roads=roads)
     assert len(new) == 1 and sorted(new[0]['members'].tolist()) == list(range(16, 24))
 
 
@@ -148,7 +148,7 @@ def test_small_cluster_skipped(roads):
     assert not grids[0][0].marked.any()                           # nach Wohngebäuden: Ausläufer
     grids[0][0].marked[:] = grids[0][0].tail                      # erzwungen markiert: Cluster trotzdem zu klein
     skipped = []
-    assert plan_extra(C[None, :], xy, hh, st_of, grids, roads=roads, skipped=skipped) == []
+    assert plan_extra(xy, hh, grids, roads=roads, skipped=skipped) == []
     assert skipped == [8]
 
 
@@ -190,7 +190,7 @@ def test_hamlet_beyond_junction_is_marked(tmp_path):
     assert len(far_feeders) == 3                                  # jede Straße ein eigener Abgang
     assert all((nf[len(near):] == f).sum() < TAIL_MIN_HOMES for f in far_feeders)
     assert set(np.flatnonzero(grid.marked)) == far_feeders and not grid.tail.any()
-    new = plan_extra(s[None, :], xy, np.ones(len(xy), int), st_of, grids, roads=roads)
+    new = plan_extra(xy, np.ones(len(xy), int), grids, roads=roads)
     assert len(new) == 1 and sorted(new[0]['members'].tolist()) == list(range(len(near), len(xy)))
 
 

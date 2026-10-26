@@ -24,7 +24,8 @@ COS_LOAD = 0.97                 # Verschiebungsfaktor bei Bezug (bei Einspeisung
 TAN_LOAD = float(np.tan(np.arccos(COS_LOAD)))
 DU_LOAD_MAX_PCT = 5.0           # Planungsgrenze Spannungsfall bei Bezug
 DU_FEED_MAX_PCT = 3.0           # Planungsgrenze Spannungsanhebung bei Einspeisung
-I_LIMIT = 1.0                   # Anteil des thermischen Grenzstroms
+I_LIMIT = 1.0                   # Anteil des thermischen Grenzstroms; Bewertung (metrics.LINE_LIMIT_PCT) und
+                                # Abnahme (report.LIMIT_PCT) leiten ihre Grenze hieraus ab
 MAX_PARALLEL = 2
 # Fix-Runde 2 (Owner „Ist-Abgleich“, 25.10.2026): Mindestquerschnitt im Strang nach üblicher Praxis, nicht aus
 # Steyr-Daten belegt. stadt/ort: Kabel mindestens NAYY 4x150, Freileitung mindestens Al 4x95; streu unverändert.

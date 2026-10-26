@@ -141,6 +141,9 @@ def design_loads(p):
     fw = np.asarray(p.nodes_fw, dtype=bool)
     homes = hh > 0
     fw_frac = fw[homes].mean() if homes.any() else 0.0
+    # Kopie aus profiles.assign (p_wp, Wärme je Knoten) und nodeflow._wp_nodes (Zellen-/Warmwasser-Schleife), bewusst
+    # nicht ausgelagert: der abgenommene Stand (cache-fix4) soll unberührt bleiben. Ändert sich assign, hier
+    # nachziehen; tests/test_feeders_prepare.py::test_design_rule_uses_same_p_wp_as_assign fängt Abweichungen bei p_wp.
     p_wp = min(1.0, share['wp_share'] / max(1 - fw_frac, 1e-9))           # wie profiles.assign
     wpev = profiles.wpev
     pauschal = np.where(hh == 1, wpev.HEAT_KWH_EFH, wpev.HEAT_KWH_MFH_HH * hh).astype(float)
@@ -448,6 +451,9 @@ def feeder_context(input_dir, prepared_root):
     st_of, xy, hh, st_xy = _members(inp, root, p.n_stations)
     _check_nodes(root, years, st_of, hh)
     _check_positions(root, years, st_xy)
+    if not (inp / ROADS_FILE).exists():
+        warnings.warn(f'{inp / ROADS_FILE} fehlt: alle Stationsnetze werden per Luftlinie gebaut (anderes Netz als '
+                      'mit Straßen; im Manifest roads=false)', RuntimeWarning, stacklevel=2)
     return {'p': p, 'years': years, 'st_of': st_of, 'xy': xy, 'hh': hh, 'st_xy': st_xy,
             'kwp': np.asarray(p.nodes_kwp_bins, dtype=float).sum(axis=1), 'loads': design_loads(p),
             'roads': RoadGraph(inp / ROADS_FILE) if (inp / ROADS_FILE).exists() else None}

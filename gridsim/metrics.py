@@ -10,11 +10,13 @@ import math
 
 import numpy as np
 
+from gridsim.feeders.sizing import I_LIMIT
+
 TRAFO_SIZES = (125, 160, 250, 400, 630, 800, 1000)
 FACTOR_INST = 0.6 * 0.85 * 0.8 * 0.8
 KW_PER_UNIT, RELIABILITY, KWH_PER_UNIT = 5.0, 0.85, 10.0
 MIN_PAUSE_H = 8
-LINE_LIMIT_PCT = 100.0   # Planungsgrenze: 100 % Grenzstrom
+LINE_LIMIT_PCT = 100.0 * I_LIMIT   # Planungsgrenze in % Grenzstrom, aus derselben Konstante wie die Bemessung
 
 # Kosten (Annahmen): Speicher und Verschleiß aus ems-konzept § 7.3; Trafo-Stufe und Leitung ohne Quelle
 COST_DEFAULTS = {'storage_eur_per_kwh': 600.0, 'wear_eur_per_kwh': 0.05, 'trafo_step_eur': None, 'line_eur_per_m': None}

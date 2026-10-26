@@ -48,6 +48,8 @@ def assign(p, scenario, rng):
     fw = np.asarray(p.nodes_fw, dtype=bool)
     homes = hh > 0
     fw_frac = fw[homes].mean() if homes.any() else 0.0
+    # dieselbe Formel steht in feeders/prepare.design_loads (Bemessung, DesignRule.wp_share); bei Änderung dort
+    # nachziehen, Test: tests/test_feeders_prepare.py::test_design_rule_uses_same_p_wp_as_assign
     p_wp = min(1.0, share['wp_share'] / max(1 - fw_frac, 1e-9))
     has_wp = homes & ~fw & (rng.random(len(hh)) < p_wp)
     pauschal = np.where(hh == 1, wpev.HEAT_KWH_EFH, wpev.HEAT_KWH_MFH_HH * hh).astype(float)

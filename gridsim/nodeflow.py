@@ -45,6 +45,7 @@ class NodeBlock:
 
 
 def _wp_nodes(p, heat, seed, nodes):
+    # gleiche Zellen-/Warmwasser-Schleife wie feeders/prepare.design_loads (dort mit Versatz 0 für die Bemessung)
     heat = np.asarray(heat, dtype=float)
     limits, shifts = profiles.wpev.spread(len(heat), seed)
     dhw = np.asarray(p.nodes_dhw, dtype=float)[nodes]

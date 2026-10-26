@@ -241,3 +241,42 @@ def test_report_counts_voltage_only_separately():
     v = rep['voltage_only']
     assert v['feeders'] == 2 and v['stations'] == 1 and v['stations_share'] == round(1 / 3, 4)
     assert v['stations_by_area'] == {'stadt': 0, 'ort': 0, 'streu': 1}
+
+
+class _FixedRng:
+    """Liefert für ``random`` überall denselben Wert (Schwelle für has_wp in profiles.assign), Binomial = 0."""
+
+    def __init__(self, u):
+        self.u = u
+
+    def random(self, n):
+        return np.full(n, self.u)
+
+    def binomial(self, n, p):
+        return np.zeros_like(np.asarray(n))
+
+
+def test_design_rule_uses_same_p_wp_as_assign(tmp_path):
+    """Minor 2 (finales Review): Bemessung (DesignRule.wp_share) und Lauf (profiles.assign) nutzen dasselbe p_wp,
+    und die Knoten mit Auslegungs-WP sind genau die, an denen assign eine WP ziehen kann."""
+    from fakes import write_fake_prepared
+    from gridsim import profiles
+    from gridsim.data import load_prepared
+    from gridsim.feeders.prepare import DESIGN_SCENARIO, DESIGN_YEAR, design_loads
+    p = load_prepared(write_fake_prepared(tmp_path / 'p', DESIGN_YEAR), DESIGN_YEAR)
+    loads = design_loads(p)
+    p_wp = loads['rule'].wp_share
+    assert 0 < p_wp <= 1
+    below, _ = profiles.assign(p, DESIGN_SCENARIO, _FixedRng(np.nextafter(p_wp, 0.0)))   # knapp unter p_wp: WP
+    at, _ = profiles.assign(p, DESIGN_SCENARIO, _FixedRng(p_wp))                       # genau p_wp: keine WP
+    assert (below > 0).any() and not (at > 0).any()
+    np.testing.assert_array_equal(below > 0, loads['wp_kw'] > 0)
+
+
+def test_prepare_feeders_warns_without_roads(setup):
+    """Ohne osm_roads.json entsteht ein Luftliniennetz: Warnung statt nur Manifesteintrag."""
+    inp, prepared = setup
+    (inp / 'osm_roads.json').unlink()
+    with pytest.warns(RuntimeWarning, match='Luftlinie'):
+        out = prepare_feeders(inp, prepared)
+    assert json.loads((out / 'manifest.json').read_text())['roads'] is False

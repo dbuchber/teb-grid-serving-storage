@@ -21,11 +21,12 @@ from pathlib import Path
 import numpy as np
 
 from gridsim import run as runmod
+from gridsim.metrics import LINE_LIMIT_PCT
 
 ACCEPT_PARAMS = {'scenario': 'heute', 'pv_factor': 1.0, 'storage': 'base', 'charging': 'uncontrolled',
                  'limits': 'trafo', 'netzspeicher': False}
 ACCEPT_YEARS = (2012, 2017, 2023)
-LIMIT_PCT, HARD_PCT = 100.0, 120.0
+LIMIT_PCT, HARD_PCT = LINE_LIMIT_PCT, 120.0   # Planungsgrenze (sizing.I_LIMIT) und harte Abnahmegrenze
 MAX_OVER = 5
 MIN_SEEDS = 20     # Seeds je Wetterjahr, damit der Befund als Abnahme gilt (Fix-Runde 5)
 SEVERITY = ('keiner', 'trafo', 'leitung', 'beide')     # Gleichstand: schwerere Klasse (wie web/gridsim/band.js)
