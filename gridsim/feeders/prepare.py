@@ -221,12 +221,30 @@ def _check_model_version(d):
                       stacklevel=3)
 
 
+def _check_prepared(d, prepared_root):
+    """Warnt, wenn ``prepared/<jahr>/manifest.json`` nicht mehr zu dem Stand passt, auf dem die Stationsnetze gebaut
+    wurden (``manifest['prepared']`` aus ``prepare_feeders``): ``gridsim prepare`` lief danach erneut, ohne
+    ``gridsim prepare-feeders``. Passen die Knoten nicht mehr, bricht ``loading._columns`` beim Lauf ab."""
+    mf = d / 'manifest.json'
+    built = json.loads(mf.read_text()).get('prepared') if mf.exists() else None
+    if not built:
+        return
+    root = Path(prepared_root)
+    stale = [y for y, h in sorted(built.items())
+             if not (root / str(y) / 'manifest.json').exists() or _sha256(root / str(y) / 'manifest.json') != h]
+    if stale:
+        warnings.warn(f'{d}: prepared/{", ".join(stale)} weicht vom Stand beim Bau der Stationsnetze ab '
+                      '(gridsim prepare erneut gelaufen?); gridsim prepare-feeders neu ausführen', RuntimeWarning,
+                      stacklevel=3)
+
+
 def load_feeders(prepared_root):
     """Alle Stationsnetze aus ``prepared_root/feeders/``; None, wenn das Verzeichnis fehlt."""
     d = Path(prepared_root) / 'feeders'
     if not (d / 'index.json').exists():
         return None
     _check_model_version(d)
+    _check_prepared(d, prepared_root)
     index = json.loads((d / 'index.json').read_text())
     return {int(s): _load_station(d / f'{int(s)}.npz') for s in index}
 

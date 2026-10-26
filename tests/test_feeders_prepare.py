@@ -83,6 +83,22 @@ def test_load_feeders_warns_on_missing_or_other_model_version(setup):
         assert load_feeders(prepared)
 
 
+def test_load_feeders_warns_when_prepared_changed_after_build(setup):
+    """``gridsim prepare`` lief nach ``prepare-feeders`` erneut: Warnung mit Hinweis auf prepare-feeders."""
+    import warnings
+    inp, prepared = setup
+    prepare_feeders(inp, prepared)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        load_feeders(prepared)                                  # passender Stand: keine Warnung
+    mf = prepared / '2023' / 'manifest.json'
+    m = json.loads(mf.read_text())
+    m['rebuilt'] = True
+    mf.write_text(json.dumps(m))
+    with pytest.warns(RuntimeWarning, match=r'prepared/2023 .*prepare-feeders'):
+        assert load_feeders(prepared)
+
+
 def test_station_file_roundtrip_exact(setup, tmp_path):
     """CSR, Geometrie und alle Felder kommen bitgleich aus der npz-Datei zurück."""
     from gridsim.feeders.prepare import _load_station, _save_station

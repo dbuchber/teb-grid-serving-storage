@@ -92,3 +92,36 @@ def test_loading_uses_effective_limit_with_parallel():
                       marked=np.zeros(1, bool))
     pct = loading_pct(np.array([[-100.0]]), sized)
     assert pct[0, 0] == pytest.approx(100.0 * 100e3 / (np.sqrt(3) * 400.0) / 626.0, rel=1e-5)
+
+
+def test_columns_reordered_block_gives_same_flow(case):
+    """Gleiche Knotenmenge in anderer Reihenfolge: Zuordnung über ``_columns``, Fluss unverändert."""
+    from dataclasses import replace
+    from gridsim.feeders.loading import _columns
+    p, pr, f = case
+    grid, sized = fake_feeder(p, 0)
+    block = station_block(p, pr, f, 0)
+    assert _columns(grid, block) is None
+    rev = np.arange(len(block.nodes))[::-1]
+    swapped = replace(block, nodes=np.asarray(block.nodes)[rev])
+    pos = _columns(grid, swapped)
+    np.testing.assert_array_equal(np.asarray(swapped.nodes)[pos], grid.node_index)
+
+
+@pytest.mark.parametrize('kind', ['grid_node_beyond_block', 'block_node_without_grid'])
+def test_columns_mismatch_raises_clear_error(case, kind):
+    """Netz und prepared passen nicht zusammen: ValueError mit Hinweis auf prepare-feeders statt IndexError
+    bzw. still verworfener Knoten."""
+    from dataclasses import replace
+    from gridsim.feeders.loading import _columns
+    p, pr, f = case
+    grid, sized = fake_feeder(p, 0)
+    block = station_block(p, pr, f, 0)
+    nodes = np.asarray(block.nodes)
+    if kind == 'grid_node_beyond_block':        # früher IndexError (Suchindex hinter dem letzten Blockknoten)
+        grid = replace(grid, node_index=np.r_[grid.node_index[:-1], nodes.max() + 1000])
+        bad = block
+    else:                                       # früher still verworfen
+        bad = replace(block, nodes=np.r_[nodes, nodes.max() + 1000])
+    with pytest.raises(ValueError, match='prepare-feeders'):
+        _columns(grid, bad)

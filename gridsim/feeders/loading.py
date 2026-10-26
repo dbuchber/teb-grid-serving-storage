@@ -21,12 +21,17 @@ def surcharge_factor(n_hh, hh_peak_kw):
 def _columns(grid: StationGrid, block):
     """Spaltenreihenfolge des Blocks passend zu ``grid.node_index``."""
     nodes = np.asarray(block.nodes)
-    if np.array_equal(nodes, grid.node_index):
+    gi = np.asarray(grid.node_index)
+    if np.array_equal(nodes, gi):
         return None
+    missing = np.setdiff1d(gi, nodes)       # im Netz, nicht im Knotenblock
+    extra = np.setdiff1d(nodes, gi)         # im Knotenblock, ohne Netz
+    if len(missing) or len(extra) or len(nodes) != len(gi):
+        raise ValueError(f'Station {grid.station}: Knoten von Stationsnetz und prepared passen nicht zusammen '
+                         f'({len(missing)} nur im Netz, {len(extra)} nur in prepared, {len(gi)} gegen {len(nodes)} '
+                         'Knoten); prepared wurde nach dem Netzbau neu erzeugt? gridsim prepare-feeders neu ausführen')
     order = np.argsort(nodes)
-    pos = order[np.searchsorted(nodes, grid.node_index, sorter=order)]
-    if not np.array_equal(nodes[pos], grid.node_index):
-        raise ValueError(f'Station {grid.station}: Knoten des Netzes fehlen im Knotenblock')
+    pos = order[np.searchsorted(nodes, gi, sorter=order)]
     return pos
 
 
