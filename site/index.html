@@ -42,6 +42,7 @@
          continuously. If 70 % of buildings heat with a heat pump and 60 % of cars are electric, most transformers go above their rating,
          even in a mild winter like 2023. This is the stress case and an upper bound: if the real transformers are as large as the biggest in published field grids, it is about 100. In summer the opposite happens: with twice today’s solar, 32–34 transformers receive more power from the roofs than they can carry.</p>
       <p class="answer">With 35 % heat pumps it is still 152–181, but <b>smart charging</b> of the cars brings it down to 7–30, depending on the weather year (an optimistic count).</p>
+      <p class="lines-note" style="font-size: clamp(13px, 1.15vw, 15px)">And the cables? In a synthetic low-voltage grid of 432 stations the transformer comes first almost everywhere (uncontrolled charging, weather 2012 and 2023): transformer first at 46–126 stations in 2030 and 214–227 in 2040 with 50 % heat pumps, line first at only 5–6 and 11–17.</p>
     </div>
     <a class="source" href="details#results">Simulation results, median of 20 random draws</a>
     <button class="continue" type="button">Click to continue <span>↓</span></button>
@@ -206,7 +207,7 @@
         <article data-at="0" data-acts="box trust dso sub">
           <h3>Set up</h3>
           <p><b>P1 Commissioning</b>: certified modules, first test call; first half of the subsidy is paid.</p>
-          <p><b>P9 Segment</b>: the grid operator assigns the box to its transformer.</p>
+          <p><b>P9 Segment</b>: the grid operator assigns the box to its transformer and feeder.</p>
         </article>
         <article data-at="1" data-acts="price box dso inv">
           <h3>Every day</h3>
@@ -215,7 +216,7 @@
         </article>
         <article data-at="2" data-acts="dso box inv sup agg">
           <h3>Bottleneck</h3>
-          <p><b>P4 Call</b>: one signed command per transformer: charge or discharge, power, start, maximum duration, expiry, random start delay.</p>
+          <p><b>P4 Call</b>: one signed command per transformer or feeder: charge or discharge, power, start, maximum duration, expiry, random start delay.</p>
           <p><b>P7 Supplier</b> is told in advance. <b>P8</b>: third-party marketers pause for that segment.</p>
         </article>
         <article data-at="3" data-acts="box dso sub">

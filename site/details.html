@@ -60,7 +60,7 @@
   <dt>Transformer station</dt><dd>Small station in a neighbourhood that converts medium voltage to the low voltage used in homes. We often just say “transformer”.
       The Steyr region has 257 of them.</dd>
   <dt>Low-voltage grid, feeder</dt><dd>The cables or overhead lines from a transformer to the houses. A transformer has several outgoing lines, called feeders.</dd>
-  <dt>Grid segment</dt><dd>One transformer together with all houses connected to it. The grid operator addresses its requests per segment.</dd>
+  <dt>Grid segment</dt><dd>One transformer together with all houses connected to it, or one of its feeders. The grid operator addresses its requests per segment.</dd>
   <dt>kW, kWh</dt><dd>Kilowatt is power (how much at one moment), kilowatt-hour is energy (power over time). MW = 1,000 kW.</dd>
   <dt>Reactive power, power factor, Q(U)</dt><dd>Part of the current only swings back and forth and does no useful work, but it still loads cables
       and transformers. The power factor is the share of useful power (0.97 means 3 % is lost to this). Q(U) is a rule in the Austrian connection
@@ -71,7 +71,8 @@
       it may carry more without harm; step 7 checks this as well.</dd>
   <dt>Feed-in, demand</dt><dd>Feed-in: houses send power into the grid (solar at midday). Demand: houses draw power from the grid.</dd>
   <dt>Bottleneck, overload</dt><dd>An hour in which the power through a transformer is above its rating. “Overload hours” counts these hours per year.
-      A bottleneck is <i>thermally critical</i> if the transformer would also get too hot (step 7); only then is it urgent.</dd>
+      A bottleneck is <i>thermally critical</i> if the transformer would also get too hot (step 7); only then is it urgent.
+      A <i>line overload</i> is an hour in which the current in a cable section is above its rated current.</dd>
   <dt>Curtailment</dt><dd>The grid operator limits a solar system so it feeds in less. The energy is lost.</dd>
   <dt>Grid reinforcement</dt><dd>Replacing a transformer with a larger one or laying more cables. Expensive and slow.</dd>
 </dl>
@@ -127,7 +128,8 @@
         and 0.7 kVA per kWp of today's PV, rounded up to a standard size. These are the low end of the three field grids, so our transformers
         tend to be small; the sensitivity in chapter 4 shows what larger ones change. Because today's PV is part of the sizing,
         today's feed-in bottlenecks are few by construction. Assigning buildings along the streets instead changes which transformer
-        they belong to for about one in seven buildings (also shown in chapter 4). PV systems from 30 kWp get their own feeder.</dd>
+        they belong to for about one in seven buildings (also shown in chapter 4). PV systems from 30 kWp get their own feeder.
+        For the line results we built a second, more detailed synthetic grid with 432 stations and sized cable sections (<a href="#lines">chapter 4, lines</a>).</dd>
     <dt>Data</dt><dd>Austrian address register (BEV); reference grids of the DG DemoNet project (Eberstalzell, Littring, Köstendorf, final report 2015)
         and TU Wien reference feeders (2018).</dd>
   </dl>
@@ -271,6 +273,9 @@
       (90–150) would also get too hot. These numbers depend most on how large the real transformers are (see “How robust”).
       In the <b>2040 moderate</b> case (35 % heat pumps) 152–181 are above their rating with uncontrolled charging,
       but only <span class="good">7–30 with smart charging</span> (optimistic count, see the winter section): there the evening peak comes mainly from the cars.</li>
+  <li><b>Lines: the transformer comes first.</b> In a second, more detailed synthetic grid (432 stations, every cable section sized and checked)
+      the cables are the first bottleneck at only 5–6 stations in 2030 and 11–17 in 2040 with 50 % heat pumps; the transformer comes first at 46–126 and 214–227.
+      Smart charging that respects the cables removes the remaining line overloads (see <a href="#lines">lines</a>).</li>
   <li><b>Electric cars: smart charging solves</b> every case in which heat pumps and households alone stay below the transformer rating.</li>
   <li><b>V2G is a reserve, not a cure.</b> At the weak rural segment in 2040 V2G cuts the overload hours from 149 to 43 a year, but the peak
       stays 82 kW above the rating and the cars leave with <span class="bad">more energy missing (9.5 instead of 5.3 MWh a year)</span>,
@@ -342,6 +347,82 @@
      a voltage drop above 5 % at about 165 of 257 transformers already <i>today</i>, and at 19–27 the calculation does not converge. Real grids
      work today, so our synthetic feeders (median longest feeder about 1 km, along the streets) are too long and too weak. Statements on
      winter voltage need the grid operator's real grid; the results per transformer above are not affected.</p>
+</section>
+<section id="lines">
+  <h3>Low-voltage lines: do the cables fail before the transformer?</h3>
+  <p class="takeaway mid">Almost never. In our synthetic low-voltage grid the transformer is the first bottleneck at almost every station;
+     the cables come first at only 5–17 of 432 stations. Smart charging that respects every cable section removes the remaining line overloads
+     without leaving cars less charged.</p>
+  <p>As of 26 Oct 2026. For this part we built a second, more detailed synthetic grid: each station gets feeders along the streets,
+     and every cable section is sized by common planning rules (rated current, 5 % voltage drop, 3 % voltage rise) for today's load.
+     257 stations come from map data, 175 more were added where feeders would otherwise be too long or carry too much current: <b>432 stations</b> in total.
+     The simulation then checks the current in every section for every hour of the year, next to the transformer, with 20 random draws.
+     Check “today”: in none of the three weather years is any cable above its rated current (P90 over the draws, highest 88.9 %).</p>
+  <h4>Which limit is reached first? (uncontrolled charging, median of 20 random draws, of 432 stations)</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Scenario</th><th>Weather year</th><th>Transformers overloaded</th><th>Stations with line overload</th><th>Transformer first</th><th>Line first</th><th>Both at once</th><th>Neither</th></tr></thead>
+    <tbody>
+      <tr><td>2030 (35 % heat pumps, 0.25 EVs per household)</td><td>2012 (cold spell)</td><td>127</td><td>9</td><td>126</td><td>6</td><td>1</td><td>299</td></tr>
+      <tr><td>2030</td><td>2023 (mild)</td><td>52</td><td>4</td><td>46</td><td>5</td><td>0</td><td>381</td></tr>
+      <tr><td><b>2040, 50 % heat pumps</b> (main 2040 case), 0.60 EVs</td><td>2012 (cold spell)</td><td>298</td><td>101</td><td>214</td><td>11</td><td>89</td><td>118</td></tr>
+      <tr><td><b>2040, 50 % heat pumps</b></td><td>2023 (mild)</td><td>250</td><td>49</td><td>227</td><td>17</td><td>26</td><td>162</td></tr>
+      <tr><td>2040 stress case (70 % heat pumps)</td><td>2012 (cold spell)</td><td>324</td><td>160</td><td>169</td><td>11</td><td>157</td><td>95</td></tr>
+      <tr><td>2040 stress case</td><td>2023 (mild)</td><td>289</td><td>80</td><td>226</td><td>11</td><td>64</td><td>131</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">“First” is decided per station in the demand direction: which limit is exceeded first. Today 11 (2012) and 2 (2023) of the 432 transformers
+     are overloaded and no station has a line overload. No line overload from solar feed-in with today's PV. The transformer counts here differ from
+     the 257-transformer results above because this grid has 175 more stations and therefore different transformer areas.</p>
+  <h4>What smart charging, V2G and grid storage do (2040 with 50 % heat pumps)</h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Weather year</th><th>Transformers overloaded: uncontrolled → smart charging → V2G</th><th>Stations with line overload: smart charging (transformer only) → respecting the lines</th><th>Energy not charged, MWh a year: smart charging / V2G</th></tr></thead>
+    <tbody>
+      <tr><td>2012 (cold spell)</td><td>298 → <span class="good">122</span> → <span class="good">33</span></td><td>40 → <span class="good">0</span></td><td>280 / 508</td></tr>
+      <tr><td>2023 (mild)</td><td>250 → <span class="good">38</span> → <span class="good">2</span></td><td>34 → <span class="good">0</span></td><td>6 / 13</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul class="findings">
+    <li><b>Smart charging and V2G work at the transformer.</b> In 2030 (2012) they cut the overloaded transformers from 127 to 36 and 10.
+        The price is energy the cars lack in a cold spell (280 MWh with smart charging, 508 MWh with V2G in 2040, 2012).</li>
+    <li><b>Respecting the lines costs nothing extra here.</b> Smart charging that only watches the transformer leaves 34–40 stations with a line overload,
+        because it shares out the charging power without looking at the feeders. If it respects every cable section as well, none is left, and the
+        energy not charged stays the same (280 MWh). In the stress case (2012) 14 stations remain instead of 52. A call therefore has to be able to address
+        one feeder, not only a whole transformer (profile, P4 and P9).</li>
+    <li><b>Grid storage helps little.</b> A battery owned by the grid operator behind the most overloaded section of a feeder (2040, 50 %, 2012): 170 such batteries
+        with 24.8 MWh in total (146 kWh on average) lower the stations with line overload only from 101 to 88 and the overloaded cable length from
+        11.0 to 8.3 km; the transformers hardly change (298 → 296). With line-aware smart charging none is needed.</li>
+  </ul>
+  <h4>Assumptions behind the scenarios</h4>
+  <div class="tablewrap"><table class="text">
+    <thead><tr><th class="l">Scenario</th><th class="l">Heat pumps (share of households)</th><th class="l">EVs per household</th><th class="l">How it compares with published sources</th></tr></thead>
+    <tbody>
+      <tr><td class="l">Today</td><td class="l">21.4 % (23 % of residential buildings)</td><td class="l">0.076</td><td class="l">From Upper Austria statistics: 142,397 of 666,900 homes heat with “solar, heat pumps” (winter 2023/24);
+          51,343 electric cars for 672,647 households (end of 2025). Statistik Austria does not publish values per district.</td></tr>
+      <tr><td class="l">2030</td><td class="l">35 %</td><td class="l">0.25</td><td class="l">Plausible but ambitious: AIT for Oesterreichs Energie (2024) implies 31–40 % heat pumps and 0.24 EVs; the Upper Austrian trend gives about 29 % and 0.19.</td></tr>
+      <tr><td class="l"><b>2040, 50 % heat pumps</b> (main case)</td><td class="l">50 %</td><td class="l">0.60</td><td class="l">Within the sources: AIT 48–57 %; replacing every oil, gas and electric heating in Upper Austria gives about 50 %. EVs as AIT (0.60).</td></tr>
+      <tr><td class="l">2040 stress case</td><td class="l">70 %</td><td class="l">0.60</td><td class="l">Not covered by any source we found; more than 20 percentage points of homes with wood or district heating would have to switch.</td></tr>
+    </tbody>
+  </table></div>
+  <h4>What these line results cannot say</h4>
+  <ul class="findings">
+    <li><b>Synthetic grid.</b> Routes, lengths and cable types come from streets, buildings and a planning rule, not from the grid operator. Single stations can be
+        far off; only the order of magnitude and the direction across the region are reliable. Minimum cable sizes and sizing for a 1-in-10 load make the grid
+        rather stronger than the real one, so future line bottlenecks are rather underestimated.</li>
+    <li><b>Voltage is not evaluated.</b> All figures are thermal (current against rated current). At 93 of 432 stations (21.5 %) 122 feeders keep the
+        current limit but not the voltage limit even with the strongest cable; there a real grid operator would have to act because of voltage.
+        Where voltage limits first, the thermal view underestimates the need.</li>
+    <li><b>Transformer ratings from a rule of thumb</b> (2–3 kVA per home, rounded to standard sizes), not from the grid operator. One size larger shifts
+        stations from “transformer first” to “line first”. The model already shows 11 overloaded transformers today in the cold year 2012, while the real ones carry today's load.</li>
+    <li><b>Today's shares are Upper Austria values.</b> Heat pumps and EVs “today” use figures for the whole province; district figures are not published.</li>
+    <li><b>Uncontrolled charging at 11 kW is an upper bound.</b> Cars charge at full wallbox power after arriving in the evening. Salzburg Netz measures about
+        0.5 kW extra load per vehicle at large transformer stations (99 % quantile, Maier/Groiß, EnInnov 2026), so the EV bottlenecks are an upper bound.</li>
+  </ul>
+  <p class="note">Load flow check: the simple summation along the feeders is 2.5 % (today) and 3.9 % (2040, 50 %) below a full pandapower load flow (median).
+     Rated currents: Weisenstein et al. 2022. Full acceptance report with all settings: <code>docs/gridsim-leitungen-abnahme.md</code> in the project repository.</p>
 </section>
 <section>
   <h3>How robust are these numbers?</h3>
@@ -523,7 +604,7 @@
   </tbody>
 </table></div>
 <p class="note">Profile v2 adds P7 Balance group (the supplier's balance group is told before and after each call and paid back), P8 Third-party marketers
-   (blocking windows per segment so an aggregator never works against a call), P9 Segment assignment (box ↔ transformer, from the meter point,
+   (blocking windows per segment so an aggregator never works against a call), P9 Segment assignment (box ↔ transformer and feeder, from the meter point,
    not from coordinates) and P10 Keys (revocation, key change, decommissioning, box swap).</p>
 
 <h4 id="exchanges">Information exchanges: who sends what to whom</h4>
@@ -841,6 +922,9 @@
     <tr><td class="l"><b>Synthetic low-voltage grids</b> (step 2)</td>
         <td class="l">The real grid is critical infrastructure and not public. Calibrated against published Austrian field grids.</td>
         <td class="l">Results per transformer are plausible, not exact. The 30 kWp threshold is an assumption.</td></tr>
+    <tr><td class="l"><b>Cable sections checked in a second synthetic grid</b> (432 stations, chapter 4)</td>
+        <td class="l">A call per transformer is not enough if a single feeder is the bottleneck. The detailed grid shows how often that happens.</td>
+        <td class="l">Thermal only, voltage not evaluated (93 of 432 stations have voltage-only cases); synthetic; transformer ratings from a rule of thumb.</td></tr>
     <tr><td class="l"><b>Every hour of a full year</b> (step 7)</td>
         <td class="l">Bottlenecks are rare events. A typical day or a monthly mean would miss them, and the battery need depends on how long each event lasts.</td>
         <td class="l">Hourly, not 15-minute values: short peaks are smoothed. The live simulation uses 15-minute steps for the single day.</td></tr>
@@ -896,6 +980,10 @@
     <tr><td class="l">Heating demand</td><td class="l">TABULA building typology; Statistik Austria household energy use</td><td class="l">Step 5</td></tr>
     <tr><td class="l">Heat-pump efficiency</td><td class="l">when2heat (Open Power System Data, CC BY 4.0)</td><td class="l">Step 5</td></tr>
     <tr><td class="l">Heat-pump outlook for the scenarios</td><td class="l">Umweltbundesamt scenario “with additional measures” (via BMK); TU Wien “Wärmezukunft 2050”</td><td class="l">Step 5</td></tr>
+    <tr><td class="l">Heat pumps and EVs today (Upper Austria)</td><td class="l">Statistik Austria: primary heating system 2003–2024 (micro-census household energy use 2023/24); vehicle stock 2025; household forecast (via WKÖ)</td><td class="l">Lines</td></tr>
+    <tr><td class="l">Heat-pump and EV shares 2030 / 2040</td><td class="l">AIT for Oesterreichs Energie, update of the grid calculations, final report v1.1 (22 Jan 2024)</td><td class="l">Lines</td></tr>
+    <tr><td class="l">Rated currents of cables and overhead lines</td><td class="l">Weisenstein et al. 2022, table 10</td><td class="l">Lines</td></tr>
+    <tr><td class="l">Measured EV charging load</td><td class="l">Salzburg Netz, Maier/Groiß, EnInnov 2026</td><td class="l">Lines (limits)</td></tr>
     <tr><td class="l">Temperature</td><td class="l">GeoSphere Austria INCA; Wachtberg climate station</td><td class="l">Step 6</td></tr>
     <tr><td class="l">Base map</td><td class="l">basemap.at (CC BY 4.0)</td><td class="l">Map</td></tr>
   </tbody>

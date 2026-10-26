@@ -1,6 +1,6 @@
 # Interoperabilitätsprofil „Grid-Serving Storage“ v2 – Entwurf für einen VNB-Pilot
 
-Stand: 24.10.2026. Arbeitsentwurf, nicht abgenommen.
+Stand: 24.10.2026, ergänzt 26.10.2026 (Abruf je Abgang, Netzspeicher; Grundlage: [gridsim-leitungen-abnahme.md](../gridsim-leitungen-abnahme.md)). Arbeitsentwurf, nicht abgenommen.
 Grundlage: Profil v1 (Kapitel 5 der ausführlichen Seite, [site/details.html](../../site/details.html#proposal))
 und ein internes technisches Gutachten vom 24.10.2026 (nicht im Repository), Findings F-15 bis F-18 sowie Teil 2 E, F, G.
 
@@ -60,6 +60,8 @@ Die Challenge umfasst Speicher vom Haushalt bis zum Gewerbestandort. Prozesse P1
 | Hauptrisiko | viele Geräte gleichzeitig | wie H | ein gestohlener Schlüssel bewegt mehrere MW: Schlüssel je Anlage, Quittung mit Plausibilitätsprüfung, Vier-Augen-Freigabe |
 
 Neu für G und M: **P11 Flexibilitätsmeldung** (day-ahead: Fahrplan und Band [P_min, P_max] je Viertelstunde, Baseline für die Verifikation) und **P12 Flexibler Netzzugang** (Anschluss vor dem Netzausbau gegen Einspeisebegrenzung in Engpasszeiten). Details: grossspeicher-integration.md A3–A6. Gewerbe- und Großspeicher sind in der Simulation noch nicht abgebildet (offen).
+
+**Netzspeicher des VNB – Vorschlag(v2.1):** Ein Speicher im Eigentum des VNB an einem Leitungsabschnitt (Knoten hinter dem am stärksten überlasteten Abschnitt eines Abgangs, höchstens einer je Abgang). Er ist ein Betriebsmittel des VNB wie Trafo oder Kabel, kein Kundenspeicher: keine Box, keine Förderstufe, keine Vergütung nach P5; Ansteuerung aus der Netzleittechnik des VNB. Ergebnis der Simulation (synthetisches NS-Netz, 432 Stationen, 2040 mit 50 % Wärmepumpen, Wetter 2012, ungesteuertes Laden): 170 Netzspeicher mit zusammen 24,8 MWh (im Mittel 146 kWh) senken die Stationen mit Leitungsüberlast von 101 auf 88 und die überlastete Leitungslänge von 11,0 auf 8,3 km; am Trafo ändern sie fast nichts (298 → 296 überlastete Trafos). Mit leitungsbewusst gesteuertem Laden entsteht kein Bedarf (0 Netzspeicher). Lesart: Brücke für wenige ungesteuerte Fälle, kein Ersatz für Steuerung oder Trafotausch; Kostensätze sind Platzhalter (offen).
 
 ### 1b. Informationsaustausch (IES-Sicht) – Vorschlag(v2)
 
@@ -125,6 +127,8 @@ Die Tabellen sind Kurzfassungen. Sequenzdiagramme und die vollständige Vorlage 
 | Nachbedingung | Segment wieder im Eigenverbrauch, gestaffelt über das Endfenster. Abruf im Protokoll |
 | Fehlerfälle | Signatur ungültig → ignorieren, Zähler „verworfen“ erhöhen. Nachricht verloren → Box handelt nicht (kein Schaden). Ablauf während des Abrufs → Endrampe wie Schritt 7. SOC-Grenze erreicht → Box hält die Grenze, fährt mit Rampe weg. Tagesgrenze erreicht → Abruf abgelehnt |
 
+**Abruf je Abgang – Vorschlag(v2.1):** Ein Segment ist entweder ein Ortsnetztrafo oder ein Abgang dieses Trafos. Liegt der Engpass an einem Leitungsabschnitt, ruft der VNB nur die Speicher hinter diesem Abschnitt ab (Segment-ID des Abgangs); liegt er am Trafo, alle Speicher des Trafos. Die Abrufnachricht (Abschn. 6.4) bleibt gleich, nur die Segment-ID zeigt auf den Abgang. Grundlage aus gridsim (synthetisches NS-Netz, 432 Stationen, Modellwerte): Der erste Engpass ist fast überall der Trafo (2040 mit 50 % Wärmepumpen, ungesteuert, Wetter 2012: Trafo zuerst 214, Leitung zuerst 11, beide 89 von 432 Stationen). Gesteuertes Laden, das nur den Trafo kennt, lässt 40 Stationen mit Leitungsüberlast; leitungsbewusst gesteuert (Trafo **und** jeder Abschnitt) sind es 0, bei gleicher ungeladener Energie (280 MWh). Abrufe und Steuerung müssen daher den Abgang adressieren können, auch wenn der Trafo der häufigere Engpass ist.
+
 ### P7 Information der Bilanzgruppe, Fahrplankorrektur und Ausgleich – Vorschlag(v2)
 
 | Feld | Inhalt |
@@ -159,8 +163,8 @@ Offen: ob die Ausgleichszahlung über EDA, bilateral oder über eine Korrektur i
 | Auslöser | Inbetriebnahme (P1), dauerhafte Netzänderung, vorübergehende Umschaltung |
 | Akteure | VNB (GIS/Netzleitsystem), Box, LoRaWAN-Netzserver |
 | Vorbedingungen | Zählpunkt der Box bekannt; Segment-ID im GIS des VNB |
-| Ablauf | 1. Inbetriebnahme: Installateur erfasst Zählpunktnummer, VNB ermittelt das Segment aus Zählpunkt → Abgang → Trafo (nicht aus Koordinaten). 2. VNB signiert eine **Segmentzuweisung** (Box-ID, Segment-ID, gültig ab, Sequenz) und fügt die Box der Multicast-Gruppe des Segments hinzu (TS005, unicast, einmalig). 3. Dauerhafte Änderung: neue Zuweisung, alte Gruppe verlassen. 4. **Vorübergehende Umschaltung** (Störung, Wartung): Box behält die Zuordnung. VNB sendet an das betroffene Segment eine signierte **Segmentsperre** (keine Abrufe bis Zeitpunkt X) bzw. adressiert die Abrufe an das neue Speisesegment über eine signierte **Alias-Nachricht** (Segment A gilt bis X als Teil von B). |
-| Nachbedingung | Box handelt nur auf Abrufe mit eigener Segment-ID oder gültigem Alias |
+| Ablauf | 1. Inbetriebnahme: Installateur erfasst Zählpunktnummer, VNB ermittelt das Segment aus Zählpunkt → Abgang → Trafo (nicht aus Koordinaten); die Box erhält die Segment-ID ihres Trafos **und** ihres Abgangs (Abruf je Abgang, siehe P4). 2. VNB signiert eine **Segmentzuweisung** (Box-ID, Segment-ID, gültig ab, Sequenz) und fügt die Box der Multicast-Gruppe des Segments hinzu (TS005, unicast, einmalig). 3. Dauerhafte Änderung: neue Zuweisung, alte Gruppe verlassen. 4. **Vorübergehende Umschaltung** (Störung, Wartung): Box behält die Zuordnung. VNB sendet an das betroffene Segment eine signierte **Segmentsperre** (keine Abrufe bis Zeitpunkt X) bzw. adressiert die Abrufe an das neue Speisesegment über eine signierte **Alias-Nachricht** (Segment A gilt bis X als Teil von B). |
+| Nachbedingung | Box handelt nur auf Abrufe mit eigener Segment-ID (Trafo oder Abgang) oder gültigem Alias |
 | Fehlerfälle | Zuordnung im GIS falsch → erkannt über Testabruf (P3): Trafomessung reagiert nicht wie erwartet. Box ohne Zuweisung → nur Eigenverbrauch und Tagespreise |
 
 Auch bei falscher Zuordnung bleiben die harten Grenzen (Abschn. 3) wirksam, der Schaden ist begrenzt.
