@@ -41,8 +41,8 @@ Voraussetzungen: Python ≥ 3.12 und [uv](https://docs.astral.sh/uv/); für den 
 
 ```sh
 uv sync
-uv run pytest                          # 78 passed, 1 skipped (Tests laufen mit Fakes, ohne Serverdaten)
-node --test web/gridsim/*.test.mjs     # Dashboard-Module
+uv run pytest                          # 269 passed, 1 skipped (Tests laufen mit Fakes, ohne Serverdaten)
+node --test web/gridsim/*.test.mjs     # Dashboard-Module (20 Tests)
 
 cd apps/insight-harbor && bun install && bun run test   # Rechner: 15 Tests
 bun run dev                                              # Rechner lokal
